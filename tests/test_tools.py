@@ -259,6 +259,9 @@ def test_install_preserves_data(tmp_path: Path) -> None:
     install_files(tmp_path, env)
     assert (tmp_path / "SOUL.before-drawer.md").read_text("utf-8") == "original"
     assert "Джессика" in (tmp_path / "SOUL.md").read_text("utf-8")
+    (tmp_path / "SOUL.md").write_text("User-edited persona", "utf-8")
+    install_files(tmp_path, env)
+    assert (tmp_path / "SOUL.md").read_text("utf-8") == "User-edited persona"
     settings = object_map(
         json.loads((tmp_path / "plugins/drawer/settings.json").read_text("utf-8"))
     )
@@ -273,7 +276,10 @@ def test_install_preserves_data(tmp_path: Path) -> None:
         "web",
         "clarify",
         "memory",
+        "file",
+        "skills",
     ]
+    assert object_map(configuration["terminal"])["cwd"] == str(tmp_path.resolve())
     display = object_map(configuration["display"])
     telegram = object_map(object_map(display["platforms"])["telegram"])
     assert telegram["memory_notifications"] == "off"

@@ -21,7 +21,7 @@ from .network import object_map
 
 
 def install_files(profile: Path, env_file: Path) -> None:
-    """Copy versioned plugin assets, save local settings and back up the persona.
+    """Install plugin assets and update only an unmodified template persona.
 
     Args:
         profile (Path): Existing named Hermes profile directory.
@@ -49,6 +49,13 @@ def install_files(profile: Path, env_file: Path) -> None:
         raise ValueError(message)
     source = Path(__file__).parent
     destination = profile / "plugins/drawer"
+    persona = profile / "SOUL.md"
+    previous_template = destination / "SOUL.md"
+    update_persona = (
+        not persona.exists()
+        or not previous_template.exists()
+        or persona.read_bytes() == previous_template.read_bytes()
+    )
     shutil.copytree(
         source,
         destination,
@@ -65,11 +72,11 @@ def install_files(profile: Path, env_file: Path) -> None:
         ),
         encoding="utf-8",
     )
-    persona = profile / "SOUL.md"
     backup = profile / "SOUL.before-drawer.md"
     if persona.exists() and not backup.exists():
         shutil.copy2(persona, backup)
-    shutil.copy2(source / "SOUL.md", persona)
+    if update_persona:
+        shutil.copy2(source / "SOUL.md", persona)
     scripts = profile / "scripts"
     scripts.mkdir(exist_ok=True)
     (scripts / "drawer_tick.py").write_text(
@@ -89,7 +96,7 @@ def configure_toolset(profile: Path) -> None:
         profile (Path): Existing Hermes profile directory.
 
     Returns:
-        None: Artist tools are selected and background memory notices are hidden.
+        None: Artist/file/skill tools are selected, profile cwd set and notices hidden.
 
     Raises:
         OSError: Configuration cannot be read or replaced.
@@ -107,7 +114,11 @@ def configure_toolset(profile: Path) -> None:
         "web",
         "clarify",
         "memory",
+        "file",
+        "skills",
     ]
+    terminal = object_map(config.setdefault("terminal", {}))
+    terminal["cwd"] = str(profile.resolve())
     display = object_map(config.setdefault("display", {}))
     platform_display = object_map(display.setdefault("platforms", {}))
     telegram_display = object_map(platform_display.setdefault("telegram", {}))
