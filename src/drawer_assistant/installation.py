@@ -18,6 +18,7 @@ import yaml
 from dotenv import dotenv_values, set_key
 
 from .alibaba_inputs import endpoint
+from .hermes_compat import patch_telegram
 from .network import object_map
 
 
@@ -38,8 +39,14 @@ def install_files(profile: Path, env_file: Path) -> None:
         UnicodeError: Configuration text is not UTF-8.
         yaml.YAMLError: The existing Hermes configuration is malformed.
         shutil.Error: Copying the plugin fails.
+        RuntimeError: Checking or applying the Hermes album fix fails or times out.
     """  # noqa: DOC503 - File, config and timezone failures propagate.
     settings = dotenv_values(env_file, interpolate=False, encoding="utf-8-sig")
+    source = Path(
+        settings.get("HERMES_SOURCE_DIR") or profile.parent.parent / "hermes-agent"
+    )
+    if (source / "plugins/platforms/telegram/adapter.py").exists():
+        patch_telegram(source)
     timezone = settings.get("DRAWER_TIMEZONE") or "Europe/Kaliningrad"
     ZoneInfo(timezone)
     directory = Path(
@@ -132,6 +139,8 @@ def configure_toolset(profile: Path) -> None:
     platform_display = object_map(display.setdefault("platforms", {}))
     telegram_display = object_map(platform_display.setdefault("telegram", {}))
     telegram_display["memory_notifications"] = "off"
+    telegram_config = object_map(config.setdefault("telegram", {}))
+    object_map(telegram_config.setdefault("extra", {}))["drawer_complete_albums"] = True
     temporary = config_file.with_suffix(".drawer.tmp")
     temporary.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
     temporary.replace(config_file)

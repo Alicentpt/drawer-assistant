@@ -291,6 +291,8 @@ def test_install_preserves_data(tmp_path: Path) -> None:
         "skills",
     ]
     assert object_map(configuration["terminal"])["cwd"] == str(tmp_path.resolve())
+    album_settings = object_map(object_map(configuration["telegram"])["extra"])
+    assert album_settings["drawer_complete_albums"] is True
     display = object_map(configuration["display"])
     telegram = object_map(object_map(display["platforms"])["telegram"])
     assert telegram["memory_notifications"] == "off"

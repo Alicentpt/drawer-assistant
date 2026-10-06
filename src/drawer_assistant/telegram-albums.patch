@@ -1,0 +1,379 @@
+--- a/plugins/platforms/telegram/adapter.py
++++ b/plugins/platforms/telegram/adapter.py
+@@ -624,6 +624,10 @@
+         self._pending_photo_batch_tasks: Dict[str, asyncio.Task] = {}
+         self._media_group_events: Dict[str, MessageEvent] = {}
+         self._media_group_tasks: Dict[str, asyncio.Task] = {}
++        # Drawer compatibility: raw album updates wait for the shared caption before downloading.
++        self._drawer_album_updates: Dict[str, list[tuple[Update, ContextTypes.DEFAULT_TYPE]]] = {}
++        self._drawer_album_timers: Dict[str, asyncio.Task] = {}
++        self._drawer_album_tasks: set[asyncio.Task] = set()
+         # Aggregate client-side splits of long messages into one MessageEvent; bounds are conservative
+         # for Telegram's ~1 edit/s flood envelope.
+         self._text_batch_delay_seconds = self._env_float_clamped(
+@@ -3290,6 +3294,7 @@
+         current_task = asyncio.current_task()
+         pending_tasks = self._collect_live_tasks(
+             [
++                *getattr(self, "_drawer_album_tasks", ()),
+                 *self._media_group_tasks.values(), *self._pending_photo_batch_tasks.values(), *self._pending_text_batch_tasks.values(),
+                 getattr(self, "_polling_error_task", None), getattr(self, "_polling_progress_verifier_task", None),
+                 # Hold-queue redispatch must be cancellable+awaitable on teardown too.
+@@ -3317,6 +3322,7 @@
+                 for event in list(events.values()):
+                     self._hold_inbound_event(event, where=where)
+         for d in (
++            getattr(self, "_drawer_album_updates", {}), getattr(self, "_drawer_album_timers", {}), getattr(self, "_drawer_album_tasks", set()),
+             self._media_group_tasks, self._media_group_events, self._pending_photo_batch_tasks,
+             self._pending_photo_batches, self._pending_text_batch_tasks, self._pending_text_batches):
+             d.clear()
+@@ -6636,9 +6642,12 @@
+             prior_task.cancel()
+         self._pending_photo_batch_tasks[batch_key] = asyncio.create_task(self._flush_photo_batch(batch_key))
+ 
+-    async def _route_photo_event(self, msg, event: MessageEvent) -> None:
++    async def _route_photo_event(self, msg, event: MessageEvent, album_events: Optional[List[MessageEvent]] = None) -> None:
+         """Album items debounce on media_group_id; singles go through the photo burst batcher."""
+         if self._drop_unresolved(event):  # identity FIRST: the batch lane is derived from it
++            return
++        if album_events is not None:
++            album_events.append(event)
+             return
+         media_group_id = getattr(msg, "media_group_id", None)
+         if media_group_id:
+@@ -6695,7 +6704,7 @@
+         event.message_type = mtype
+         logger.info(log_fmt, path)
+ 
+-    async def _cache_inbound_document(self, msg, event: MessageEvent) -> bool:
++    async def _cache_inbound_document(self, msg, event: MessageEvent, album_events: Optional[List[MessageEvent]] = None) -> bool:
+         """Cache a document attachment (image → photo path, video, else generic media + text injection).
+         Returns True when the event was already dispatched/routed so the caller must return."""
+         doc = msg.document
+@@ -6728,7 +6737,7 @@
+                         "image/"
+                     ) else _TELEGRAM_IMAGE_EXT_TO_MIME.get(image_ext, "image/jpeg"),
+                     MessageType.PHOTO, "[Telegram] Cached user image-document at %s")
+-                await self._route_photo_event(msg, event)
++                await self._route_photo_event(msg, event, album_events)
+                 return True
+             if not ext and doc.mime_type:
+                 ext = {v: k for k, v in SUPPORTED_VIDEO_TYPES.items()}.get(doc.mime_type, "")
+@@ -6744,7 +6753,10 @@
+                 self._set_cached_media(
+                     event, await cache_video_from_bytes_async(bytes(video_bytes), ext=ext), SUPPORTED_VIDEO_TYPES[ext], MessageType.VIDEO,
+                     "[Telegram] Cached user video document at %s")
+-                await self.handle_message(event)
++                if album_events is not None:
++                    album_events.append(event)
++                else:
++                    await self.handle_message(event)
+                 return True
+             # Any file type is accepted (authorization is the gate, not the extension); unknown types get
+             # application/octet-stream. Image documents already returned above.
+@@ -6778,7 +6790,87 @@
+             await self._surface_media_cache_failure(msg, event, "attachment", e, display_name=getattr(doc, "file_name", None) or None)
+         return False
+ 
+-    async def _handle_media_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
++    def _queue_drawer_album(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
++        """Buffer authorized album updates before applying their shared mention trigger.
++
++        Args:
++            update (Update): Incoming update with a message and media_group_id.
++            context (ContextTypes.DEFAULT_TYPE): Telegram callback context.
++
++        Returns:
++            None: A chat/topic/sender-scoped, debounced album flush is scheduled.
++
++        Raises:
++            RuntimeError: There is no running event loop to schedule the flush.
++            Exception: The host cannot construct the event or record its receipt.
++        """
++        msg = update.message
++        event = self._build_message_event(msg, self._media_message_type(msg), update_id=update.update_id)
++        source = event.source
++        key = f"{source.chat_id}:{source.thread_id}:{source.user_id}:{msg.media_group_id}"
++        # Bounded raw metadata only; no downloads happen until a caption passes the usual gate.
++        if key not in self._drawer_album_updates and len(self._drawer_album_updates) >= 64:
++            logger.warning("[Telegram] Album intake busy; update left unaccepted")
++            return
++        self._drawer_album_updates.setdefault(key, []).append((update, context))
++        prior = self._drawer_album_timers.get(key)
++        if prior is not None:
++            prior.cancel()
++        task = asyncio.create_task(self._flush_drawer_album(key))
++        self._drawer_album_timers[key] = task
++        self._drawer_album_tasks.add(task)
++        task.add_done_callback(self._drawer_album_tasks.discard)
++        self._accept_update()
++
++    async def _flush_drawer_album(self, key: str) -> None:
++        """Download every admitted album item before delivering one complete event.
++
++        Args:
++            key (str): Album key including chat, topic and sender identity.
++
++        Returns:
++            None: One combined event is delivered, or an unmentioned album is ignored.
++
++        Raises:
++            asyncio.CancelledError: A newer item resets the timer or shutdown cancels it.
++            Exception: The host's event construction or dispatch fails.
++        """
++        combined = None
++        try:
++            await asyncio.sleep(self.MEDIA_GROUP_WAIT_SECONDS)
++            self._drawer_album_timers.pop(key, None)
++            items = self._drawer_album_updates.pop(key, [])
++            if not items or not any(self._should_process_message(item.message) for item, _ in items):
++                return
++            if self._should_drop_delayed_delivery():
++                return
++            events: List[MessageEvent] = []
++            for update, context in sorted(items, key=lambda item: item[0].message.message_id):
++                await self._handle_media_message(update, context, album_events=events)
++            pending: Dict[str, MessageEvent] = {}
++            for event in events:
++                self._merge_into_pending(pending, key, event)
++            combined = pending.get(key)
++            if combined is None:
++                return
++            combined.text = (f"[Album: {len(items)} attachments received; "
++                             f"{len(combined.media_urls)} files available. Process every available file.]\n"
++                             + (combined.text or ""))
++            logger.info("[Telegram] Complete album: %d items, %d cached files", len(items), len(combined.media_urls))
++            if self._should_drop_delayed_delivery():
++                self._hold_inbound_event(combined, where="drawer-album-flush")
++            else:
++                await self.handle_message(combined)
++            combined = None
++        except asyncio.CancelledError:
++            if combined is not None:
++                self._hold_inbound_event(combined, where="drawer-album-cancelled")
++            raise
++        finally:
++            if self._drawer_album_timers.get(key) is asyncio.current_task():
++                self._drawer_album_timers.pop(key, None)
++
++    async def _handle_media_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *, album_events: Optional[List[MessageEvent]] = None) -> None:
+         """Handle incoming media messages, downloading images to local cache."""
+         msg = update.message
+         if not msg:
+@@ -6786,7 +6878,11 @@
+         if not self._is_user_authorized_from_message(msg):
+             self._log_blocked_user(msg, level=logging.INFO, what="media from unauthorized user")
+             return
+-        if not self._should_process_message(msg):
++        if (album_events is None and getattr(msg, "media_group_id", None)
++                and self._is_group_chat(msg) and self.config.extra.get("drawer_complete_albums", False)):
++            self._queue_drawer_album(update, context)
++            return
++        if album_events is None and not self._should_process_message(msg):
+             if self._should_observe_unmentioned_group_message(msg):
+                 _event = self._build_message_event(msg, self._media_message_type(msg), update_id=update.update_id)
+                 if msg.caption:
+@@ -6813,7 +6909,7 @@
+                 self._set_cached_media(
+                     event, await cache_image_from_bytes_async(bytes(image_bytes), ext=ext), f"image/{ext.lstrip('.')}", event.message_type,
+                     "[Telegram] Cached user photo at %s")
+-                await self._route_photo_event(msg, event)
++                await self._route_photo_event(msg, event, album_events)
+                 return
+             except Exception as e:
+                 logger.warning("[Telegram] Failed to cache photo: %s", _redact_telegram_error_text(e), exc_info=True)
+@@ -6828,7 +6924,10 @@
+         elif msg.video:
+             if await self._cache_inbound_av(msg, event, msg.video, "video file", "video", ".mp4", "video/mp4"):
+                 return
+-        elif msg.document and await self._cache_inbound_document(msg, event):
++        elif msg.document and await self._cache_inbound_document(msg, event, album_events):
++            return
++        if album_events is not None:
++            album_events.append(event)
+             return
+         media_group_id = getattr(msg, "media_group_id", None)
+         if media_group_id:
+--- /dev/null
++++ b/tests/plugins/test_telegram_drawer_albums.py
+@@ -0,0 +1,180 @@
++"""Regression tests for complete, mention-gated Telegram albums in Drawer."""
++
++import asyncio
++from datetime import datetime, timezone
++from types import SimpleNamespace
++from unittest.mock import AsyncMock
++
++import pytest
++from telegram import Bot, Chat, Document, File, Message, MessageEntity, PhotoSize, Update, User
++
++from gateway.config import PlatformConfig
++from plugins.platforms.telegram.adapter import TelegramAdapter
++
++
++@pytest.fixture
++def adapter(monkeypatch: pytest.MonkeyPatch) -> TelegramAdapter:
++    """Create a group-only adapter with real authorization and no network dispatch.
++
++    Args:
++        monkeypatch (pytest.MonkeyPatch): Isolates inherited Telegram environment.
++
++    Returns:
++        TelegramAdapter: Album-enabled adapter with a captured downstream handler.
++    """
++    import os
++    for name in tuple(os.environ):
++        if name.startswith("TELEGRAM_") or name == "GATEWAY_ALLOW_ALL_USERS":
++            monkeypatch.delenv(name, raising=False)
++    instance = TelegramAdapter(PlatformConfig(enabled=True, token="123:fixture", extra={
++        "drawer_complete_albums": True, "require_mention": True,
++        "allowed_chats": ["-100"], "group_allowed_chats": ["-100"],
++        "group_allow_from": ["*"], "allow_from": [], "guest_mode": False,
++        "unauthorized_dm_behavior": "ignore", "observe_unmentioned_group_messages": False,
++    }))
++    instance._bot = SimpleNamespace(id=999, username="hermes_bot")
++    instance.MEDIA_GROUP_WAIT_SECONDS = 0.01
++    instance.handle_message = AsyncMock()
++    return instance
++
++
++def update(index: int, caption: bool, kind: str, chat_id: int = -100,
++           sender: int = 111, album: str = "a", topic: int | None = None) -> Update:
++    """Construct a Telegram update with exactly one real photo or image-document.
++
++    Args:
++        index (int): Unique update and message identifier.
++        caption (bool): Whether this frame mentions the bot.
++        kind (str): Either photo or document.
++        chat_id (int): Telegram chat identifier. Defaults to -100.
++        sender (int): Sender identifier. Defaults to 111.
++        album (str): Telegram media group identifier. Defaults to "a".
++        topic (int | None): Optional forum topic. Defaults to None.
++
++    Returns:
++        Update: One album frame ready for the adapter's normal intake handler.
++    """
++    attachment = (Document(str(index), str(index), file_name=f"{index}.png", mime_type="image/png", file_size=8)
++                  if kind == "document" else PhotoSize(str(index), str(index), 16, 16))
++    attachment.set_bot(Bot("123:fixture"))
++    return Update(index, message=Message(
++        message_id=index, date=datetime.now(timezone.utc),
++        chat=Chat(chat_id, "private" if chat_id > 0 else "supergroup", is_forum=topic is not None),
++        from_user=User(sender, "Alice", False), media_group_id=album,
++        message_thread_id=topic, is_topic_message=topic is not None,
++        caption="@hermes_bot save every image" if caption else None,
++        caption_entities=[MessageEntity("mention", 0, 11)] if caption else None,
++        photo=[attachment] if kind == "photo" else None,
++        document=attachment if kind == "document" else None,
++    ))
++
++
++async def deliver(adapter: TelegramAdapter, updates: list[Update]) -> None:
++    """Feed updates through the public callback and await all album delivery tasks.
++
++    Args:
++        adapter (TelegramAdapter): Isolated adapter with mocked downstream handler.
++        updates (list[Update]): Ordered updates to receive as one Telegram burst.
++
++    Returns:
++        None: All callbacks and the final delayed delivery have completed.
++
++    Raises:
++        TimeoutError: Album tasks do not finish within five seconds.
++        Exception: The real adapter callback or delayed delivery fails.
++    """
++    for item in updates:
++        await adapter._handle_media_message(item, SimpleNamespace())
++    results = await asyncio.wait_for(asyncio.gather(*adapter._drawer_album_tasks, return_exceptions=True), 5)
++    for result in results:
++        if isinstance(result, Exception):
++            raise result
++
++
++@pytest.mark.parametrize("caption_index", [0, 2])
++@pytest.mark.parametrize("kind", ["photo", "document"])
++@pytest.mark.parametrize("slow", [False, True])
++@pytest.mark.asyncio
++async def test_all_frames(adapter: TelegramAdapter, monkeypatch: pytest.MonkeyPatch,
++                          caption_index: int, kind: str, slow: bool) -> None:
++    """Deliver every frame once even when the caption is last or downloads are slow.
++
++    Args:
++        adapter (TelegramAdapter): Isolated group-only adapter.
++        monkeypatch (pytest.MonkeyPatch): Replaces network and cache writes.
++        caption_index (int): Frame whose caption contains the mention.
++        kind (str): Photo or original image document.
++        slow (bool): Whether each download exceeds the album debounce interval.
++
++    Returns:
++        None: All three files reach a single downstream event in message order.
++
++    Raises:
++        AssertionError: A frame or caption is lost, duplicated or split.
++        TimeoutError: Album processing hangs.
++    """
++    async def download(*_args: object, **_kwargs: object) -> bytearray:
++        """Simulate a bounded file transfer.
++
++        Args:
++            *_args (object): Ignored Telegram method positional arguments.
++            **_kwargs (object): Ignored Telegram method keyword arguments.
++
++        Returns:
++            bytearray: Synthetic image bytes, handled by the mocked cache.
++        """
++        if slow:
++            await asyncio.sleep(0.04)
++        return bytearray(b"image")
++    monkeypatch.setattr(Bot, "get_file", AsyncMock(return_value=File("f", "u", file_path="photo.png")))
++    monkeypatch.setattr(File, "download_as_bytearray", download)
++    cache = AsyncMock(side_effect=["one.png", "two.png", "three.png"])
++    monkeypatch.setattr("plugins.platforms.telegram.adapter.cache_image_from_bytes_async", cache)
++    example = update(1, True, kind).message
++    assert adapter._is_user_authorized_from_message(example), "user auth"
++    assert adapter._message_mentions_bot(example), ("mention", adapter._current_bot_username())
++    assert adapter._should_process_message(example), "trigger"
++    await deliver(adapter, [update(i + 1, i == caption_index, kind) for i in range(3)])
++    adapter.handle_message.assert_awaited_once()
++    event = adapter.handle_message.call_args.args[0]
++    assert event.media_urls == ["one.png", "two.png", "three.png"]
++    assert "save every image" in event.text
++    assert "3 attachments received; 3 files available" in event.text
++    assert cache.await_count == 3
++
++
++@pytest.mark.parametrize("case", ["unmentioned", "outside", "dm", "sender", "topic", "album"])
++@pytest.mark.asyncio
++async def test_access_and_isolation(adapter: TelegramAdapter, monkeypatch: pytest.MonkeyPatch, case: str) -> None:
++    """Keep group restrictions and never borrow another conversation's mention.
++
++    Args:
++        adapter (TelegramAdapter): Isolated group-only adapter.
++        monkeypatch (pytest.MonkeyPatch): Replaces downloads and image cache writes.
++        case (str): Boundary or trigger condition to exercise.
++
++    Returns:
++        None: Only the explicitly addressed, authorized album can download files.
++
++    Raises:
++        AssertionError: An unaddressed or unauthorized frame is delivered/downloaded.
++        TimeoutError: Pending album tasks fail to complete.
++    """
++    get_file = AsyncMock(return_value=File("f", "u", file_path="photo.png"))
++    monkeypatch.setattr(Bot, "get_file", get_file)
++    monkeypatch.setattr(File, "download_as_bytearray", AsyncMock(return_value=bytearray(b"image")))
++    monkeypatch.setattr("plugins.platforms.telegram.adapter.cache_image_from_bytes_async", AsyncMock(return_value="allowed.png"))
++    if case in {"unmentioned", "outside", "dm"}:
++        chat = {"outside": -200, "dm": 111}.get(case, -100)
++        items = [update(i + 1, case != "unmentioned" and i == 0, "photo", chat_id=chat) for i in range(3)]
++        expected = 0
++    else:
++        items = [update(1, True, "photo"), update(2, False, "photo",
++                 sender=222 if case == "sender" else 111,
++                 album="b" if case == "album" else "a", topic=9 if case == "topic" else None)]
++        expected = 1
++    await deliver(adapter, items)
++    assert adapter.handle_message.await_count == expected
++    assert get_file.await_count == expected
++    if expected:
++        assert adapter.handle_message.call_args.args[0].media_urls == ["allowed.png"]
