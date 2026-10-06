@@ -67,7 +67,7 @@ def deliver_due(path: Path, send: Callable[[str], None], now: datetime) -> int:
                 )
                 # These labels are intentionally Russian, not mixed-script identifiers.
                 text = (
-                    f"Джесс на связи. {row['title']}\n"
+                    f"Джессика на связи. {row['title']}\n"
                     f"Срок: {local_due}\nЗаказ: {identifier}"  # noqa: RUF001
                 )
                 try:

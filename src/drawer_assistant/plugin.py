@@ -16,6 +16,32 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
+def read_persona(settings_file: Path, params: dict[str, str]) -> dict[str, str]:
+    """Read only the installed profile's persona, independently of chat memory.
+
+    Args:
+        settings_file (Path): Installed plugin settings in profile/plugins/drawer.
+        params (dict[str, str]): Must be empty; arbitrary paths are never accepted.
+
+    Returns:
+        dict[str, str]: Profile name, fixed source filename and current persona text.
+
+    Raises:
+        ValueError: Any tool argument is supplied.
+        OSError: The profile persona cannot be read.
+        UnicodeError: The persona is not UTF-8.
+    """  # noqa: DOC503 - File reading and decoding failures propagate.
+    if params:
+        message = "Persona reading takes no arguments."
+        raise ValueError(message)
+    profile = settings_file.parent.parent.parent
+    return {
+        "profile": profile.name,
+        "source": "SOUL.md",
+        "text": (profile / "SOUL.md").read_text("utf-8"),
+    }
+
+
 # A structural protocol intentionally specifies only the single consumed host API.
 class PluginContext(Protocol):  # pylint: disable=too-few-public-methods
     """Describe only the registration method consumed from the external host."""
@@ -65,6 +91,10 @@ def handle(
         if any(not isinstance(value, str) for value in params.values()):
             return json.dumps({"error": "All arguments must be strings."})
         arguments = {key: str(value) for key, value in params.items()}
+        if tool == "drawer_persona":
+            return json.dumps(
+                {"result": read_persona(settings_file, arguments)}, ensure_ascii=False
+            )
         settings = object_map(json.loads(settings_file.read_text("utf-8")))
         database = Path(str(settings["database"]))
         base = str(settings["comfy_url"]).rstrip("/")
@@ -106,7 +136,7 @@ def register(ctx: PluginContext) -> None:
         ctx (PluginContext): Registration facade supplied by Hermes.
 
     Returns:
-        None: Three tools are registered in the drawer toolset.
+        None: Artist tools and read-only persona inspection are registered.
 
     Raises:
         OSError: The packaged schema file cannot be read.

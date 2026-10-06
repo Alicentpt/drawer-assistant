@@ -1,7 +1,7 @@
 # Архитектура и этапы
 
 ```text
-Telegram → Hermes / Джесс
+Telegram → Hermes / Джессика
            ├─ drawer_orders → SQLite ← worker без LLM → Telegram
            ├─ drawer_references → SQLite
            ├─ drawer_generate → ComfyUI HTTP → GPU-сервер
@@ -29,7 +29,7 @@ Hermes на этом ноутбуке при подготовке: commit
 
 ## 1. Два инструмента
 
-Реализовано для первого теста: персона Джесс, native plugin `drawer`, заказы,
+Реализовано для первого теста: персона Джессика, native plugin `drawer`, заказы,
 перенос/закрытие сроков, привязанные ссылки, cron без LLM и очередь ComfyUI.
 Инструменты зарегистрированы отдельно: orders, references, generate.
 Таймер вызывает `.venv` проекта; SQLite сериализует отправку и изменение заказа.

@@ -1,4 +1,13 @@
 {
+  "drawer_persona": {
+    "name": "drawer_persona",
+    "description": "Read the current SOUL.md from this bot's installed Hermes profile. Use when asked to show your persona, identity instructions or persona file. Returns its exact text and profile, separately from conversation memory. Read-only; takes no paths or arguments and cannot modify files.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
   "drawer_orders": {
     "name": "drawer_orders",
     "description": "Persistent orders and deadlines. List before updating an order. create requires id/title; update requires id. Dates use ISO 8601 with offset and timezone. A due change replaces the old reminder; reminder defaults to due unless explicitly provided, empty clears. done/cancelled suppress reminders. Stable create ids prevent duplicate retries. Results include delivery attempts/error state.",

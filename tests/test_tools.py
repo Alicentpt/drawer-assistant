@@ -258,7 +258,7 @@ def test_install_preserves_data(tmp_path: Path) -> None:
     install_files(tmp_path, env)
     install_files(tmp_path, env)
     assert (tmp_path / "SOUL.before-drawer.md").read_text("utf-8") == "original"
-    assert "Джесс" in (tmp_path / "SOUL.md").read_text("utf-8")
+    assert "Джессика" in (tmp_path / "SOUL.md").read_text("utf-8")
     settings = object_map(
         json.loads((tmp_path / "plugins/drawer/settings.json").read_text("utf-8"))
     )
@@ -277,6 +277,51 @@ def test_install_preserves_data(tmp_path: Path) -> None:
     display = object_map(configuration["display"])
     telegram = object_map(object_map(display["platforms"])["telegram"])
     assert telegram["memory_notifications"] == "off"
+
+
+def test_persona_profile_scope(tmp_path: Path) -> None:
+    """Read each installed profile's current persona without allowing arbitrary paths.
+
+    Args:
+        tmp_path (Path): Isolated root containing two simulated Hermes profiles.
+
+    Returns:
+        None: Profiles remain isolated, edits are visible and path arguments fail.
+
+    Raises:
+        AssertionError: The tool reads stale, unrelated or arbitrary content.
+        OSError: Fixture directories or persona files cannot be created.
+        UnicodeError: Fixture text cannot be encoded or decoded.
+        ValueError: A tool response is malformed JSON or not an object.
+        KeyError: A response lacks its expected result or error field.
+    """  # noqa: DOC502 - Assertions, file writes and JSON parsing can fail.
+    for name in ("first", "second"):
+        profile = tmp_path / name
+        plugin = profile / "plugins/drawer"
+        plugin.mkdir(parents=True)
+        (plugin / "SOUL.md").write_text("stale packaged persona", "utf-8")
+        persona = profile / "SOUL.md"
+        settings = plugin / "settings.json"
+        for text in (f"Persona {name}", f"Updated {name}"):
+            persona.write_text(text, "utf-8")
+            result = object_map(
+                json.loads(handle({}, tool="drawer_persona", settings_file=settings))
+            )
+            assert result["result"] == {
+                "profile": name,
+                "source": "SOUL.md",
+                "text": text,
+            }
+        rejected = object_map(
+            json.loads(
+                handle(
+                    {"path": "../../.env"},
+                    tool="drawer_persona",
+                    settings_file=settings,
+                )
+            )
+        )
+        assert rejected["error"] == "ValueError"
 
 
 @pytest.mark.parametrize("gpu_only", [True, False])
