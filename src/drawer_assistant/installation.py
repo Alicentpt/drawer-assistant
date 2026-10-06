@@ -89,7 +89,7 @@ def configure_toolset(profile: Path) -> None:
         profile (Path): Existing Hermes profile directory.
 
     Returns:
-        None: Telegram uses orders, references, images, web, vision and clarification.
+        None: Artist tools are selected and background memory notices are hidden.
 
     Raises:
         OSError: Configuration cannot be read or replaced.
@@ -108,6 +108,10 @@ def configure_toolset(profile: Path) -> None:
         "clarify",
         "memory",
     ]
+    display = object_map(config.setdefault("display", {}))
+    platform_display = object_map(display.setdefault("platforms", {}))
+    telegram_display = object_map(platform_display.setdefault("telegram", {}))
+    telegram_display["memory_notifications"] = "off"
     temporary = config_file.with_suffix(".drawer.tmp")
     temporary.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
     temporary.replace(config_file)

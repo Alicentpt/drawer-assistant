@@ -31,14 +31,14 @@ CREATE TABLE IF NOT EXISTS refs (
 CREATE TABLE IF NOT EXISTS jobs (
  id TEXT PRIMARY KEY, prompt TEXT NOT NULL, workflow TEXT NOT NULL,
  prompt_id TEXT NOT NULL DEFAULT '', state TEXT NOT NULL DEFAULT 'submitting',
- file TEXT NOT NULL DEFAULT ''
+ file TEXT NOT NULL DEFAULT '', generation_seconds TEXT NOT NULL DEFAULT ''
 );
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
 """
 
 
 def connect(path: Path) -> sqlite3.Connection:
-    """Open a database and apply the first schema migration when necessary.
+    """Open a database and migrate missing tables or generation timing metadata.
 
     Args:
         path (Path): Database filename outside the source checkout.
@@ -55,13 +55,21 @@ def connect(path: Path) -> sqlite3.Connection:
     database = sqlite3.connect(path, timeout=35)
     database.row_factory = sqlite3.Row
     try:
-        version = database.execute("PRAGMA user_version").fetchone()[0]
-        if version == 0:
-            database.executescript(SCHEMA)
+        with database:
+            database.execute("BEGIN IMMEDIATE")
+            version = database.execute("PRAGMA user_version").fetchone()[0]
+            if version == 0:
+                database.executescript(SCHEMA)
+            elif version == 1:
+                database.execute(
+                    "ALTER TABLE jobs ADD COLUMN generation_seconds "
+                    "TEXT NOT NULL DEFAULT ''"
+                )
+                database.execute("PRAGMA user_version = 2")
     except sqlite3.Error, ValueError:
         database.close()
         raise
-    if version not in (0, 1):
+    if version not in (0, 1, 2):
         database.close()
         message = "Unsupported database version; update Drawer Assistant."
         raise ValueError(message)

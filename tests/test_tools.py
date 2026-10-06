@@ -15,7 +15,7 @@ from drawer_assistant.installation import install_files
 from drawer_assistant.network import object_map
 from drawer_assistant.plugin import handle
 from drawer_assistant.reminders import deliver_due
-from drawer_assistant.store import orders, references, utc
+from drawer_assistant.store import orders, references, transaction, utc
 
 
 def test_order_lifecycle(tmp_path: Path) -> None:
@@ -274,6 +274,9 @@ def test_install_preserves_data(tmp_path: Path) -> None:
         "clarify",
         "memory",
     ]
+    display = object_map(configuration["display"])
+    telegram = object_map(object_map(display["platforms"])["telegram"])
+    assert telegram["memory_notifications"] == "off"
 
 
 @pytest.mark.parametrize("gpu_only", [True, False])
@@ -306,7 +309,13 @@ def test_comfy_completion(
             {"prompt_id": "abcd-1234"},
             {
                 "abcd-1234": {
-                    "status": {"completed": True},
+                    "status": {
+                        "completed": True,
+                        "messages": [
+                            ["execution_start", {"timestamp": 1000}],
+                            ["execution_success", {"timestamp": 8439}],
+                        ],
+                    },
                     "outputs": {
                         "9": {
                             "images": [
@@ -338,7 +347,62 @@ def test_comfy_completion(
     result = comfy.status(database, "http://test", "result")
     assert Path(result["file"]).read_bytes() == png
     assert result["media"] == f"MEDIA:{result['file']}"
+    assert result["generation_seconds"] == "7.44"
     assert comfy.status(database, "http://test", "result") == result
     expected_requests = 3  # One preflight, one submission and one history lookup.
     assert remote.call_count == expected_requests
     assert download.call_count == 1
+
+
+@pytest.mark.parametrize("timestamps", [[], [2000, 1000], [True, 1000], ["0", 1000]])
+def test_invalid_generation_timing(timestamps: list[object]) -> None:
+    """Do not invent generation durations from missing or invalid server events.
+
+    Args:
+        timestamps (list[object]): Missing, reversed or incorrectly typed timestamps.
+
+    Returns:
+        None: Invalid timing is represented by an empty value rather than zero.
+
+    Raises:
+        AssertionError: Invalid timestamps produce a duration.
+    """  # noqa: DOC502 - Pytest assertions raise on unexpected results.
+    events = [
+        [name, {"timestamp": value}]
+        for name, value in zip(
+            ("execution_start", "execution_success"), timestamps, strict=False
+        )
+    ]
+    assert comfy.execution_seconds({"messages": events}) == ""
+
+
+def test_timing_migration(tmp_path: Path) -> None:
+    """Keep existing orders and jobs when upgrading the version-one database.
+
+    Args:
+        tmp_path (Path): Isolated database directory.
+
+    Returns:
+        None: Migration preserves records and marks historical timings as unknown.
+
+    Raises:
+        AssertionError: Migration loses a record or invents a historical duration.
+        OSError: The database directory cannot be accessed.
+        ValueError: Fixture arguments or database schema are invalid.
+        KeyError: A required fixture field or timezone is unavailable.
+        sqlite3.Error: Creating, downgrading or migrating the fixture database fails.
+        OverflowError: Normalizing fixture dates exceeds datetime limits.
+    """  # noqa: DOC502 - Storage and assertion errors propagate.
+    path = tmp_path / "existing.db"
+    orders(path, {"action": "create", "id": "kept", "title": "Existing order"})
+    with transaction(path) as database:
+        database.execute("ALTER TABLE jobs DROP COLUMN generation_seconds")
+        database.execute("PRAGMA user_version = 1")
+        database.execute(
+            "INSERT INTO jobs(id,prompt,workflow) VALUES('kept','Portrait','old')"
+        )
+    assert orders(path, {"action": "list"})[0]["title"] == "Existing order"
+    with transaction(path) as database:
+        job = database.execute("SELECT * FROM jobs WHERE id='kept'").fetchone()
+        assert job["generation_seconds"] == ""
+        assert job["prompt"] == "Portrait"

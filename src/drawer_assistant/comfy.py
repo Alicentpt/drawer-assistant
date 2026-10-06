@@ -14,6 +14,43 @@ from .network import api, object_map, request
 from .store import MAX_FIELD, connect, row_values, transaction
 
 WORKFLOWS = ("zimage-w4a8-abliterated", "flux2-klein-abliterated")
+EVENT_FIELDS = 2
+
+
+def execution_seconds(server_status: dict[str, object]) -> str:
+    """Measure server execution without queueing, polling or image transfer time.
+
+    Args:
+        server_status (dict[str, object]): ComfyUI history status with event messages.
+
+    Returns:
+        str: Seconds to two decimals, or empty when timestamps are missing/invalid.
+    """
+    messages = server_status.get("messages")
+    if not isinstance(messages, list):
+        return ""
+    stamps: dict[str, int] = {}
+    # JSON containers are untyped; validate event shape and integer milliseconds.
+    for event in cast("list[object]", messages):
+        if not isinstance(event, list):
+            continue
+        if len(cast("list[object]", event)) != EVENT_FIELDS:
+            continue
+        name, data = cast("list[object]", event)
+        if not isinstance(name, str) or not isinstance(data, dict):
+            continue
+        timestamp = cast("dict[object, object]", data).get("timestamp")
+        if (
+            isinstance(timestamp, int)
+            and not isinstance(timestamp, bool)
+            and 0 <= timestamp < 2**63
+        ):
+            stamps[name] = timestamp
+    start_time = stamps.get("execution_start", -1)
+    end_time = stamps.get("execution_success", -1)
+    return (
+        f"{(end_time - start_time) / 1000:.2f}" if 0 <= start_time <= end_time else ""
+    )
 
 
 def workflow(name: str, prompt: str) -> dict[str, object]:
@@ -168,7 +205,8 @@ def status(path: Path, base: str, identifier: str) -> dict[str, str]:
         identifier (str): Previously submitted stable generation id.
 
     Returns:
-        dict[str, str]: State plus local file and MEDIA marker when completed.
+        dict[str, str]: State, file, MEDIA marker and server generation_seconds;
+            empty timing means the server supplied no valid timestamps.
 
     Raises:
         KeyError: Job or required server response field is absent.
@@ -205,10 +243,12 @@ def status(path: Path, base: str, identifier: str) -> dict[str, str]:
             result.update(
                 file=save_image(path, base, record, result["prompt_id"]),
                 state="completed",
+                generation_seconds=execution_seconds(server_status),
             )
             database.execute(
-                "UPDATE jobs SET state='completed',file=? WHERE id=?",
-                (result["file"], identifier),
+                "UPDATE jobs SET state='completed',file=?,generation_seconds=? "
+                "WHERE id=?",
+                (result["file"], result["generation_seconds"], identifier),
             )
         result["media"] = f"MEDIA:{result['file']}"
         return result
