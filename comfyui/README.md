@@ -1,4 +1,6 @@
-# GPU для референсов Джесс
+# GPU для референсов Джессики
+
+[Установка на Windows 11 / RTX 3080: Comfy Desktop, Tailscale, модели и ноды](WINDOWS.md).
 
 Тест 06.10.2026: L40, ComfyUI `7ddf9a4f8aef66bca2eda1be2b936965be12b3b0`,
 PyTorch 2.14.1+cu130. Штатные nodes, batch 1, 1024×1024, tiled VAE 512.
