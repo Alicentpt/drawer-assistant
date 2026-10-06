@@ -1,16 +1,22 @@
 # Архитектура и этапы
 
 ```text
-Telegram → Hermes → Python-плагин
-                    ├─ заказы + дедлайны → SQLite ← cron без LLM → Telegram
-                    ├─ ссылки-референсы → SQLite
-                    └─ генерация → Hermes Codex OAuth / ComfyUI HTTP
+Telegram → Hermes / Джесс
+           ├─ drawer_orders → SQLite ← worker без LLM → Telegram
+           ├─ drawer_references → SQLite
+           ├─ drawer_generate → ComfyUI HTTP → GPU-сервер
+           └─ image_generate (Hermes) → openai-codex OAuth → облачные картинки
 ```
 
-Ядро содержит заказы, задания и выбор провайдера; адаптеры — Hermes, SQLite, HTTP.
+Наш Python-плагин содержит заказы, ссылки и задания ComfyUI. Облачный
+`image_generate` предоставляет сам Hermes: toolset `image_gen`, настройка
+`image_gen.provider: openai-codex`. OAuth и реализация облачного API остаются у Hermes.
+Выбор инструмента делает агент по запросу и правилам персоны; общего Python-роутера
+двух провайдеров сейчас нет. Z-Image и Flux — два workflow внутри ComfyUI.
 Маленький Python-пакет позволяет добавить MCP позже, если он понадобится.
-Hermes переиспользуем для диалога, Telegram и OAuth. Картинки храним файлами,
-метаданные — в SQLite. Данные лежат вне репозитория, в `DRAWER_DATA_DIR`
+Hermes переиспользуем для диалога, Telegram и OAuth. ComfyUI-картинки храним файлами,
+их метаданные — в SQLite; облачные результаты обрабатывает Hermes. Данные лежат
+вне репозитория, в `DRAWER_DATA_DIR`
 и профиле Hermes `drawer-assistant`; версия кода обновляется отдельно от данных.
 
 ## 0. Окружение
