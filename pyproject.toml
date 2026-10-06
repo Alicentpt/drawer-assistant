@@ -5,27 +5,45 @@ description = "Artist assistant extensions for Hermes."
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
 license = "GPL-3.0-only"
-dependencies = []
+dependencies = [
+    "python-dotenv>=1.2.4",
+    "pyyaml>=6.0.3",
+]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[project.scripts]
+drawer-setup = "drawer_assistant.setup:main"
+
 [dependency-groups]
 dev = [
-    "bandit", "deptry", "interrogate", "mypy", "pip-audit", "poethepoet",
-    "pre-commit", "pydoclint", "pylint", "pyright", "pytest", "ruff", "vulture",
+    "bandit",
+    "deptry",
+    "interrogate",
+    "mypy",
+    "pip-audit",
+    "poethepoet",
+    "pre-commit",
+    "pydoclint",
+    "pylint",
+    "pyright",
+    "pytest",
+    "ruff",
+    "types-pyyaml>=6.0.12.20260906",
+    "vulture",
 ]
 
 [tool.poe.tasks]
 format = "ruff format ."
 lint = "ruff check ."
 format-check = "ruff format --check ."
-mypy = "mypy src"
+mypy = "mypy src tests"
 pyright = "pyright"
-pylint = "pylint src/drawer_assistant"
-doclint = "pydoclint src"
-doccoverage = "interrogate src"
+pylint = "pylint src/drawer_assistant tests"
+doclint = "pydoclint src tests"
+doccoverage = "interrogate src tests"
 deadcode = "vulture src --min-confidence 100"
 dependencies = "deptry ."
 security = "bandit -r src -c pyproject.toml"
@@ -33,7 +51,13 @@ audit = ["audit-export", "audit-check"]
 audit-export = "uv export --quiet --locked --no-emit-project --format requirements-txt --output-file audit-requirements.txt"
 audit-check = "pip-audit --strict --disable-pip --require-hashes -r audit-requirements.txt"
 test = "pytest"
-check = ["lint", "format-check", "mypy", "pyright", "pylint", "doclint", "doccoverage", "deadcode", "dependencies", "security"]
+bot = "hermes.cmd --profile default gateway run"
+bot-status = "hermes.cmd --profile default gateway status"
+check = ["lint", "format-check", "mypy", "pyright", "pylint", "doclint", "doccoverage", "deadcode", "dependencies", "security", "test"]
+
+[tool.poe.tasks.comfy-tunnel]
+cmd = "ssh -N -o IdentityAgent=none -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -i \"${COMFYUI_SSH_KEY}\" -p ${COMFYUI_SSH_PORT} -L 127.0.0.1:8188:127.0.0.1:8188 ${COMFYUI_SSH_USER}@${COMFYUI_SSH_HOST}"
+envfile = ".env"
 
 [tool.ruff]
 target-version = "py314"
@@ -41,8 +65,14 @@ line-length = 88
 
 [tool.ruff.lint]
 select = ["ALL"]
+# Preserve native pydoclint suppressions for documented propagated exceptions.
+external = ["DOC"]
 # Formatter owns these layouts. Google convention resolves D203/D211, D212/D213.
 ignore = ["COM812", "ISC001"]
+
+[tool.ruff.lint.per-file-ignores]
+# Pytest's assertions are the test oracle, not production access checks.
+"tests/**" = ["S101"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -56,7 +86,7 @@ strict = true
 warn_unreachable = true
 
 [tool.pyright]
-include = ["src"]
+include = ["src", "tests"]
 pythonVersion = "3.14"
 typeCheckingMode = "strict"
 venvPath = "."
