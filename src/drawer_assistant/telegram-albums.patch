@@ -1,6 +1,26 @@
 --- a/plugins/platforms/telegram/adapter.py
 +++ b/plugins/platforms/telegram/adapter.py
-@@ -624,6 +624,10 @@
+@@ -511,7 +511,18 @@
+ 
+ 
+ class TelegramAdapter(TelegramHeldInboundMixin, BasePlatformAdapter):
+-    """Telegram bot adapter: users/groups, MarkdownV2 replies, forum topics, media."""
++    """Telegram bot adapter: users/groups, MarkdownV2 replies, forum topics, media.
++
++    Attributes:
++        _drawer_album_updates (dict[str, list[tuple[Update, ContextTypes.DEFAULT_TYPE]]]):
++            Authorized raw updates awaiting their shared caption, keyed by chat/topic/sender/album.
++        _drawer_album_timers (dict[str, asyncio.Task]): Resettable pre-download debounce tasks.
++        _drawer_album_tasks (set[asyncio.Task]): All waiting/downloading tasks, canceled on teardown.
++    """
++
++    _drawer_album_updates: Dict[str, list[tuple[Update, ContextTypes.DEFAULT_TYPE]]]
++    _drawer_album_timers: Dict[str, asyncio.Task]
++    _drawer_album_tasks: set[asyncio.Task]
+ 
+     # Bound for the per-(chat_id, status_key) status-message cache; FIFO half-trim on overflow.
+     _STATUS_MESSAGE_IDS_MAX = 2000
+@@ -624,6 +635,10 @@
          self._pending_photo_batch_tasks: Dict[str, asyncio.Task] = {}
          self._media_group_events: Dict[str, MessageEvent] = {}
          self._media_group_tasks: Dict[str, asyncio.Task] = {}
@@ -11,7 +31,7 @@
          # Aggregate client-side splits of long messages into one MessageEvent; bounds are conservative
          # for Telegram's ~1 edit/s flood envelope.
          self._text_batch_delay_seconds = self._env_float_clamped(
-@@ -3290,6 +3294,7 @@
+@@ -3290,6 +3305,7 @@
          current_task = asyncio.current_task()
          pending_tasks = self._collect_live_tasks(
              [
@@ -19,7 +39,7 @@
                  *self._media_group_tasks.values(), *self._pending_photo_batch_tasks.values(), *self._pending_text_batch_tasks.values(),
                  getattr(self, "_polling_error_task", None), getattr(self, "_polling_progress_verifier_task", None),
                  # Hold-queue redispatch must be cancellable+awaitable on teardown too.
-@@ -3317,6 +3322,7 @@
+@@ -3317,6 +3333,7 @@
                  for event in list(events.values()):
                      self._hold_inbound_event(event, where=where)
          for d in (
@@ -27,13 +47,28 @@
              self._media_group_tasks, self._media_group_events, self._pending_photo_batch_tasks,
              self._pending_photo_batches, self._pending_text_batch_tasks, self._pending_text_batches):
              d.clear()
-@@ -6636,9 +6642,12 @@
+@@ -6636,9 +6653,26 @@
              prior_task.cancel()
          self._pending_photo_batch_tasks[batch_key] = asyncio.create_task(self._flush_photo_batch(batch_key))
  
 -    async def _route_photo_event(self, msg, event: MessageEvent) -> None:
-+    async def _route_photo_event(self, msg, event: MessageEvent, album_events: Optional[List[MessageEvent]] = None) -> None:
-         """Album items debounce on media_group_id; singles go through the photo burst batcher."""
+-        """Album items debounce on media_group_id; singles go through the photo burst batcher."""
++    async def _route_photo_event(self, msg: Message, event: MessageEvent, album_events: Optional[List[MessageEvent]] = None) -> None:
++        """Collect an admitted album frame or route a standalone photo through normal batching.
++
++        Args:
++            msg (Message): Telegram message providing the album identity.
++            event (MessageEvent): Downloaded image with resolved sender identity.
++            album_events (Optional[List[MessageEvent]]): Admitted album accumulator, or None
++                for the ordinary photo route. Defaults to None.
++
++        Returns:
++            None: The frame is appended, queued or rejected for unresolved identity.
++
++        Raises:
++            asyncio.CancelledError: Shutdown cancels an awaited downstream operation.
++            Exception: The host's ordinary photo batching or delivery fails.
++        """
          if self._drop_unresolved(event):  # identity FIRST: the batch lane is derived from it
 +            return
 +        if album_events is not None:
@@ -41,16 +76,33 @@
              return
          media_group_id = getattr(msg, "media_group_id", None)
          if media_group_id:
-@@ -6695,7 +6704,7 @@
+@@ -6695,9 +6729,22 @@
          event.message_type = mtype
          logger.info(log_fmt, path)
  
 -    async def _cache_inbound_document(self, msg, event: MessageEvent) -> bool:
-+    async def _cache_inbound_document(self, msg, event: MessageEvent, album_events: Optional[List[MessageEvent]] = None) -> bool:
-         """Cache a document attachment (image → photo path, video, else generic media + text injection).
-         Returns True when the event was already dispatched/routed so the caller must return."""
+-        """Cache a document attachment (image → photo path, video, else generic media + text injection).
+-        Returns True when the event was already dispatched/routed so the caller must return."""
++    async def _cache_inbound_document(self, msg: Message, event: MessageEvent, album_events: Optional[List[MessageEvent]] = None) -> bool:
++        """Cache an original document and retain image/video frames in an admitted album.
++
++        Args:
++            msg (Message): Incoming Telegram message containing a document.
++            event (MessageEvent): Event populated with cached paths and document metadata.
++            album_events (Optional[List[MessageEvent]]): Admitted album accumulator, or None
++                for normal delivery. Defaults to None.
++
++        Returns:
++            bool: True when already collected/dispatched; False when the caller must route it.
++
++        Raises:
++            asyncio.CancelledError: Download or downstream processing is canceled.
++            Exception: Reporting a cache failure through the host's delivery handler fails.
++        """
          doc = msg.document
-@@ -6728,7 +6737,7 @@
+         try:
+             original_filename = doc.file_name or ""
+@@ -6728,7 +6775,7 @@
                          "image/"
                      ) else _TELEGRAM_IMAGE_EXT_TO_MIME.get(image_ext, "image/jpeg"),
                      MessageType.PHOTO, "[Telegram] Cached user image-document at %s")
@@ -59,7 +111,7 @@
                  return True
              if not ext and doc.mime_type:
                  ext = {v: k for k, v in SUPPORTED_VIDEO_TYPES.items()}.get(doc.mime_type, "")
-@@ -6744,7 +6753,10 @@
+@@ -6744,7 +6791,10 @@
                  self._set_cached_media(
                      event, await cache_video_from_bytes_async(bytes(video_bytes), ext=ext), SUPPORTED_VIDEO_TYPES[ext], MessageType.VIDEO,
                      "[Telegram] Cached user video document at %s")
@@ -71,11 +123,12 @@
                  return True
              # Any file type is accepted (authorization is the gate, not the extension); unknown types get
              # application/octet-stream. Image documents already returned above.
-@@ -6778,7 +6790,87 @@
+@@ -6778,15 +6828,113 @@
              await self._surface_media_cache_failure(msg, event, "attachment", e, display_name=getattr(doc, "file_name", None) or None)
          return False
  
 -    async def _handle_media_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+-        """Handle incoming media messages, downloading images to local cache."""
 +    def _queue_drawer_album(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 +        """Buffer authorized album updates before applying their shared mention trigger.
 +
@@ -157,10 +210,24 @@
 +                self._drawer_album_timers.pop(key, None)
 +
 +    async def _handle_media_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *, album_events: Optional[List[MessageEvent]] = None) -> None:
-         """Handle incoming media messages, downloading images to local cache."""
++        """Authorize media and download every frame of an admitted album before dispatch.
++
++        Args:
++            update (Update): Incoming Telegram update with optional media message.
++            context (ContextTypes.DEFAULT_TYPE): Telegram callback context.
++            album_events (Optional[List[MessageEvent]]): Internal accumulator supplied only
++                after the shared caption passes normal gating. Defaults to None.
++
++        Returns:
++            None: Media is rejected, buffered, collected or delivered through the host.
++
++        Raises:
++            asyncio.CancelledError: Shutdown cancels a media download or delivery.
++            Exception: Event construction, authorization or downstream error reporting fails.
++        """
          msg = update.message
          if not msg:
-@@ -6786,7 +6878,11 @@
+             return
          if not self._is_user_authorized_from_message(msg):
              self._log_blocked_user(msg, level=logging.INFO, what="media from unauthorized user")
              return
@@ -173,7 +240,7 @@
              if self._should_observe_unmentioned_group_message(msg):
                  _event = self._build_message_event(msg, self._media_message_type(msg), update_id=update.update_id)
                  if msg.caption:
-@@ -6813,7 +6909,7 @@
+@@ -6813,7 +6961,7 @@
                  self._set_cached_media(
                      event, await cache_image_from_bytes_async(bytes(image_bytes), ext=ext), f"image/{ext.lstrip('.')}", event.message_type,
                      "[Telegram] Cached user photo at %s")
@@ -182,7 +249,7 @@
                  return
              except Exception as e:
                  logger.warning("[Telegram] Failed to cache photo: %s", _redact_telegram_error_text(e), exc_info=True)
-@@ -6828,7 +6924,10 @@
+@@ -6828,7 +6976,10 @@
          elif msg.video:
              if await self._cache_inbound_av(msg, event, msg.video, "video file", "video", ".mp4", "video/mp4"):
                  return
