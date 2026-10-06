@@ -14,8 +14,9 @@ from drawer_assistant import comfy
 from drawer_assistant.installation import install_files
 from drawer_assistant.network import object_map
 from drawer_assistant.plugin import handle
+from drawer_assistant.references import references
 from drawer_assistant.reminders import deliver_due
-from drawer_assistant.store import orders, references, transaction, utc
+from drawer_assistant.store import orders, transaction, utc
 
 
 def test_order_lifecycle(tmp_path: Path) -> None:

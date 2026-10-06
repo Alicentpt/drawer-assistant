@@ -69,7 +69,7 @@
   },
   "drawer_references": {
     "name": "drawer_references",
-    "description": "Save or list sourced reference links with artist notes, optionally attached to an existing order. save requires id,title,url. A repeat id updates it. This stores metadata; it does not fetch or claim to verify the URL.",
+    "description": "Persistent references linked to orders. save imports exact image bytes into SQLite from file (Telegram attachment cache or generation result) OR image_url (direct HTTP/S image); PNG/JPEG/WebP/GIF up to 20 MiB. New save requires id/title and an image or source url. url alone stores only a link, never image bytes. Omitted metadata and existing binary are preserved on update. storage=blob confirms durable binary storage; link_only does not. list returns metadata, optional order_id filter. get(id) restores an image from SQLite and returns file plus MEDIA marker for sending or explicitly requested generation. No Base64 in responses.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -78,7 +78,8 @@
           "description": "Operation",
           "enum": [
             "list",
-            "save"
+            "save",
+            "get"
           ]
         },
         "id": {
@@ -91,7 +92,7 @@
         },
         "url": {
           "type": "string",
-          "description": "Source HTTP(S) URL"
+          "description": "Optional source HTTP(S) page URL; provenance only, not downloaded. Can be omitted for file. Defaults to image_url when supplied."
         },
         "order_id": {
           "type": "string",
@@ -100,6 +101,14 @@
         "notes": {
           "type": "string",
           "description": "Why this reference helps: pose, palette, lighting, etc."
+        },
+        "file": {
+          "type": "string",
+          "description": "Absolute local image path from the received Telegram attachment or selected generation. save copies actual bytes into SQLite before confirming success. Mutually exclusive with image_url."
+        },
+        "image_url": {
+          "type": "string",
+          "description": "Direct HTTP(S) image URL to download and store as binary, not a page. Mutually exclusive with file. Never use Telegram token-bearing API URLs; use the cached attachment path."
         }
       },
       "required": [

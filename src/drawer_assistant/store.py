@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Drawer Assistant contributors.
 # SPDX-License-Identifier: GPL-3.0-only
-"""Persist orders, deadlines and reference links independently of Hermes."""
+"""Persist orders and migrate shared SQLite data independently of Hermes."""
 
 import re
 import sqlite3
@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 
 MAX_FIELD = 4000
 ORDER_FIELDS = ("title", "client", "notes", "status", "due", "timezone", "remind_at")
-REFERENCE_FIELDS = ("title", "url", "order_id", "notes")
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS orders (
  id TEXT PRIMARY KEY, title TEXT NOT NULL, client TEXT NOT NULL,
@@ -45,9 +44,21 @@ CREATE TABLE IF NOT EXISTS alibaba_jobs (
 )
 """
 
+ASSETS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS assets (
+ sha256 TEXT PRIMARY KEY, mime TEXT NOT NULL, data BLOB NOT NULL
+)
+"""
+REFERENCE_FILES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS reference_files (
+ reference_id TEXT PRIMARY KEY REFERENCES refs(id),
+ sha256 TEXT NOT NULL REFERENCES assets(sha256), filename TEXT NOT NULL
+)
+"""
+
 
 def connect(path: Path) -> sqlite3.Connection:
-    """Open a database and migrate missing tables or generation timing metadata.
+    """Open a database and migrate orders, generation jobs and binary references.
 
     Args:
         path (Path): Database filename outside the source checkout.
@@ -63,6 +74,7 @@ def connect(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     database = sqlite3.connect(path, timeout=35)
     database.row_factory = sqlite3.Row
+    database.execute("PRAGMA foreign_keys = ON")
     try:
         with database:
             database.execute("BEGIN IMMEDIATE")
@@ -78,10 +90,14 @@ def connect(path: Path) -> sqlite3.Connection:
             if version in (0, 1, 2):
                 database.execute(ALIBABA_SCHEMA)
                 database.execute("PRAGMA user_version = 3")
+            if version in (0, 1, 2, 3):
+                database.execute(ASSETS_SCHEMA)
+                database.execute(REFERENCE_FILES_SCHEMA)
+                database.execute("PRAGMA user_version = 4")
     except sqlite3.Error, ValueError:
         database.close()
         raise
-    if version not in (0, 1, 2, 3):
+    if version not in (0, 1, 2, 3, 4):
         database.close()
         message = "Unsupported database version; update Drawer Assistant."
         raise ValueError(message)
@@ -283,58 +299,3 @@ def orders(path: Path, params: dict[str, str]) -> list[dict[str, str]]:
                 (identifier,),
             )
         return [item for item in read_orders(database) if item["id"] == identifier]
-
-
-def references(path: Path, params: dict[str, str]) -> list[dict[str, str]]:
-    """Save reference URLs with notes and an optional existing order association.
-
-    Args:
-        path (Path): SQLite database filename.
-        params (dict[str, str]): Action list/save, optional order_id filter, and
-            stable id, title, url, notes for saving. A repeated id updates the link.
-
-    Returns:
-        list[dict[str, str]]: Saved references, optionally filtered by order_id.
-
-    Raises:
-        ValueError: Action, URL, identifier, title or schema version is invalid.
-        KeyError: A required argument or linked order is missing.
-        OSError: The database directory cannot be created.
-        sqlite3.Error: Reading or committing the transaction fails.
-    """  # noqa: DOC503 - Includes delegated storage errors.
-    action = params["action"]
-    if action not in {"list", "save"}:
-        message = "References action must be list or save."
-        raise ValueError(message)
-    with transaction(path) as database:
-        database.execute("BEGIN IMMEDIATE")
-        if action == "save":
-            values = {field: params.get(field, "") for field in REFERENCE_FIELDS}
-            if (
-                not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", params["id"])
-                or not values["title"].strip()
-                or not re.match(r"https?://[^/\s]+", values["url"])
-                or any(len(value) > MAX_FIELD for value in values.values())
-            ):
-                message = "Use a stable id, title and http(s) URL; fields <=4000 chars."
-                raise ValueError(message)
-            if (
-                values["order_id"]
-                and not database.execute(
-                    "SELECT 1 FROM orders WHERE id=?", (values["order_id"],)
-                ).fetchone()
-            ):
-                raise KeyError(values["order_id"])
-            database.execute(
-                "INSERT INTO refs VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
-                "title=excluded.title,url=excluded.url,order_id=excluded.order_id,"
-                "notes=excluded.notes",
-                (params["id"], *(values[field] for field in REFERENCE_FIELDS)),
-            )
-        return [
-            row_values(row)
-            for row in database.execute(
-                "SELECT * FROM refs WHERE ?='' OR order_id=? ORDER BY id",
-                (params.get("order_id", ""), params.get("order_id", "")),
-            )
-        ]

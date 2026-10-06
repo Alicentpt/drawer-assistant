@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, Protocol
 from . import alibaba, comfy
 from .alibaba_inputs import InputError
 from .network import object_map
-from .store import orders, references
+from .references import references
+from .store import orders
 
 if TYPE_CHECKING:
     from collections.abc import Callable
