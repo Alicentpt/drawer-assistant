@@ -1,0 +1,9 @@
+name: drawer
+version: "0.1.0"
+description: Jess — orders, deadlines, references and GPU generation.
+python_dependencies:
+  - "tzdata>=2025.3,<2027"
+provides_tools:
+  - drawer_orders
+  - drawer_references
+  - drawer_generate

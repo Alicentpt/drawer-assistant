@@ -8,6 +8,7 @@ license = "GPL-3.0-only"
 dependencies = [
     "python-dotenv>=1.2.4",
     "pyyaml>=6.0.3",
+    "tzdata==2025.3",
 ]
 
 [build-system]
@@ -129,6 +130,10 @@ verbose = 1
 
 [tool.deptry]
 known_first_party = ["drawer_assistant"]
+
+[tool.deptry.per_rule_ignores]
+# zoneinfo reads this data package dynamically, especially on Windows.
+DEP002 = ["tzdata"]
 
 [tool.bandit]
 exclude_dirs = [".venv"]

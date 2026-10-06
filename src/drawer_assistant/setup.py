@@ -12,6 +12,8 @@ from typing import cast
 import yaml
 from dotenv import dotenv_values, set_key
 
+from .installation import install
+
 
 def mapping(value: object) -> dict[str, object]:
     """Validate a YAML mapping at the untyped parser boundary.
@@ -134,9 +136,20 @@ def main() -> None:
     args = parser.parse_args()
     try:
         configure(args.env_file, args.profile_dir)
-    except (OSError, UnicodeError, ValueError, yaml.YAMLError) as exc:
+        install(args.profile_dir, args.env_file)
+    except (
+        OSError,
+        UnicodeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        RuntimeError,
+        yaml.YAMLError,
+    ) as exc:
         # Parser errors can include YAML contents, so never echo exception text.
         parser.exit(
             1, f"Setup failed ({type(exc).__name__}). Check .env and profile.\n"
         )
-    parser.exit(0, "Configured: one Telegram group; DMs blocked. Start host gateway.\n")
+    parser.exit(
+        0, "Configured: Jess, tools, reminders, one group. Start host gateway.\n"
+    )

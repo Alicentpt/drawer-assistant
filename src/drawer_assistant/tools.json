@@ -1,0 +1,140 @@
+{
+  "drawer_orders": {
+    "name": "drawer_orders",
+    "description": "Persistent orders and deadlines. List before updating an order. create requires id/title; update requires id. Dates use ISO 8601 with offset and timezone. A due change replaces the old reminder; reminder defaults to due unless explicitly provided, empty clears. done/cancelled suppress reminders. Stable create ids prevent duplicate retries. Results include delivery attempts/error state.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Operation",
+          "enum": [
+            "list",
+            "create",
+            "update"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable order id, 1-64 letters/digits/_/-"
+        },
+        "title": {
+          "type": "string",
+          "description": "Short order/task title"
+        },
+        "client": {
+          "type": "string",
+          "description": "Client name if supplied"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Brief, scope, price and agreed details as supplied"
+        },
+        "status": {
+          "type": "string",
+          "description": "Lifecycle",
+          "enum": [
+            "open",
+            "done",
+            "cancelled"
+          ]
+        },
+        "due": {
+          "type": "string",
+          "description": "Deadline ISO 8601 with zone offset; empty clears"
+        },
+        "timezone": {
+          "type": "string",
+          "description": "IANA zone, default Europe/Kaliningrad"
+        },
+        "remind_at": {
+          "type": "string",
+          "description": "Reminder ISO timestamp with offset; empty disables"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_references": {
+    "name": "drawer_references",
+    "description": "Save or list sourced reference links with artist notes, optionally attached to an existing order. save requires id,title,url. A repeat id updates it. This stores metadata; it does not fetch or claim to verify the URL.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Operation",
+          "enum": [
+            "list",
+            "save"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable reference id, 1-64 letters/digits/_/-"
+        },
+        "title": {
+          "type": "string",
+          "description": "Reference title"
+        },
+        "url": {
+          "type": "string",
+          "description": "Source HTTP(S) URL"
+        },
+        "order_id": {
+          "type": "string",
+          "description": "Existing order id, or empty for general reference"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Why this reference helps: pose, palette, lighting, etc."
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_generate": {
+    "name": "drawer_generate",
+    "description": "GPU-only text-to-image generation via ComfyUI, 1024x1024 batch 1. start requires stable id and prompt; status requires same id. Poll status until completed, then include returned MEDIA marker as a separate line to send the image. Never start duplicate jobs while waiting. submitting after an error means acceptance is uncertain: inspect rather than retry with a new id. Supports two measured compact models; no CPU model offload or image editing.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Operation",
+          "enum": [
+            "start",
+            "status"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable generation request id"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Image prompt, 1-4000 characters"
+        },
+        "workflow": {
+          "type": "string",
+          "description": "Model selection; default zimage-w4a8-abliterated",
+          "enum": [
+            "zimage-w4a8-abliterated",
+            "flux2-klein-abliterated"
+          ]
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
