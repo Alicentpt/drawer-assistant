@@ -254,7 +254,9 @@ def test_install_preserves_data(tmp_path: Path) -> None:
     )
     (tmp_path / "SOUL.md").write_text("original", "utf-8")
     env = tmp_path / ".env"
-    env.write_text("DRAWER_TIMEZONE=Europe/Kaliningrad\n", "utf-8")
+    env.write_text(
+        "DRAWER_TIMEZONE=Europe/Kaliningrad\nDASHSCOPE_API_KEY=fixture-only\n", "utf-8"
+    )
     install_files(tmp_path, env)
     install_files(tmp_path, env)
     assert (tmp_path / "SOUL.before-drawer.md").read_text("utf-8") == "original"
@@ -266,6 +268,14 @@ def test_install_preserves_data(tmp_path: Path) -> None:
         json.loads((tmp_path / "plugins/drawer/settings.json").read_text("utf-8"))
     )
     assert Path(str(settings["database"])).parent == tmp_path / "drawer-data"
+    assert "fixture-only" not in json.dumps(settings)
+    manifest = object_map(
+        yaml.safe_load((tmp_path / "plugins/drawer/plugin.yaml").read_text("utf-8"))
+    )
+    schemas = object_map(
+        json.loads((tmp_path / "plugins/drawer/tools.json").read_text("utf-8"))
+    )
+    assert manifest["provides_tools"] == list(schemas)
     configuration = object_map(
         yaml.safe_load((tmp_path / "config.yaml").read_text("utf-8"))
     )

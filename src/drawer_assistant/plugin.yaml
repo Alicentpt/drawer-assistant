@@ -1,9 +1,15 @@
 name: drawer
 version: "0.1.0"
-description: Jess — orders, deadlines, references and GPU generation.
+description: Jessica — orders, deadlines, references and model-specific image tools.
 python_dependencies:
   - "tzdata>=2025.3,<2027"
+  - "python-dotenv>=1.2.4,<2"
 provides_tools:
+  - drawer_persona
   - drawer_orders
   - drawer_references
-  - drawer_generate
+  - drawer_zimage
+  - drawer_flux_klein
+  - drawer_qwen_image_3
+  - drawer_qwen_image_3_pro
+  - drawer_qwen_image_2_1_pro

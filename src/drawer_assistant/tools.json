@@ -108,9 +108,9 @@
       "additionalProperties": false
     }
   },
-  "drawer_generate": {
-    "name": "drawer_generate",
-    "description": "GPU-only text-to-image generation via ComfyUI, 1024x1024 batch 1. start requires stable id and prompt; status requires same id. Poll status until completed, then include returned MEDIA marker as a separate line to send the image. Never start duplicate jobs while waiting. submitting after an error means acceptance is uncertain: inspect rather than retry with a new id. Supports two measured compact models; no CPU model offload or image editing.",
+  "drawer_zimage": {
+    "name": "drawer_zimage",
+    "description": "Z-Image W4A8 abliterated only. GPU-only ComfyUI text-to-image, 1024x1024, one image. start with stable id and prompt; poll status with same tool/id. Return MEDIA marker and generation_seconds. Never resubmit uncertain submitting jobs. No editing.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -129,14 +129,194 @@
         "prompt": {
           "type": "string",
           "description": "Image prompt, 1-4000 characters"
-        },
-        "workflow": {
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_flux_klein": {
+    "name": "drawer_flux_klein",
+    "description": "Flux2 Klein abliterated only. GPU-only ComfyUI text-to-image, 1024x1024, one image. start with stable id and prompt; poll status with same tool/id. Return MEDIA marker and generation_seconds. Never resubmit uncertain submitting jobs. No editing.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
           "type": "string",
-          "description": "Model selection; default zimage-w4a8-abliterated",
+          "description": "Operation",
           "enum": [
-            "zimage-w4a8-abliterated",
-            "flux2-klein-abliterated"
+            "start",
+            "status"
           ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable generation request id"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Image prompt, 1-4000 characters"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_qwen_image_3": {
+    "name": "drawer_qwen_image_3",
+    "description": "Alibaba qwen-image-3.0 only: paid text-to-image and editing from up to 3 reference images. One output per request. start then status with SAME tool/id; no provider fallback. SUCCEEDED returns local media and execution seconds excluding queue/download. Include MEDIA marker in reply. submitting after error means unknown acceptance; never resubmit. Requires profile DASHSCOPE_API_KEY.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "start",
+            "status"
+          ],
+          "description": "Submit once, or poll the same id until SUCCEEDED."
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable id, 1-64 letters/digits/_/-. Never change id to retry an uncertain POST."
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Positive prompt/edit instruction, 1-4000 characters. Refer to image 1, image 2 in input order."
+        },
+        "images": {
+          "type": "string",
+          "description": "Optional references: up to 3 public HTTPS URLs or absolute local PNG/JPEG/WebP paths, one per line. Local images max 10 MiB; sent to Alibaba as Base64. Use only user-selected images."
+        },
+        "size": {
+          "type": "string",
+          "description": "width*height, default 1024*1024. Pixel area 512²-2048², aspect ratio 1:8 to 8:1."
+        },
+        "seed": {
+          "type": "string",
+          "description": "Optional integer 0-2147483647; omit for random."
+        },
+        "prompt_extend": {
+          "type": "string",
+          "enum": [
+            "false",
+            "true"
+          ],
+          "description": "Default false: no automatic prompt rewriting. true enables provider enhancement/thinking."
+        },
+        "negative_prompt": {
+          "type": "string",
+          "description": "Optional separate negative prompt, max 4000 characters. Empty by default; do not invent a stock list of prohibitions."
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_qwen_image_3_pro": {
+    "name": "drawer_qwen_image_3_pro",
+    "description": "Alibaba qwen-image-3.0-pro only: paid text-to-image and editing from up to 3 reference images. One output per request. start then status with SAME tool/id; no provider fallback. SUCCEEDED returns local media and execution seconds excluding queue/download. Include MEDIA marker in reply. submitting after error means unknown acceptance; never resubmit. Requires profile DASHSCOPE_API_KEY.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "start",
+            "status"
+          ],
+          "description": "Submit once, or poll the same id until SUCCEEDED."
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable id, 1-64 letters/digits/_/-. Never change id to retry an uncertain POST."
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Positive prompt/edit instruction, 1-4000 characters. Refer to image 1, image 2 in input order."
+        },
+        "images": {
+          "type": "string",
+          "description": "Optional references: up to 3 public HTTPS URLs or absolute local PNG/JPEG/WebP paths, one per line. Local images max 10 MiB; sent to Alibaba as Base64. Use only user-selected images."
+        },
+        "size": {
+          "type": "string",
+          "description": "width*height, default 1024*1024. Pixel area 512²-2048², aspect ratio 1:8 to 8:1."
+        },
+        "seed": {
+          "type": "string",
+          "description": "Optional integer 0-2147483647; omit for random."
+        },
+        "prompt_extend": {
+          "type": "string",
+          "enum": [
+            "false",
+            "true"
+          ],
+          "description": "Default false: no automatic prompt rewriting. true enables provider enhancement/thinking."
+        },
+        "negative_prompt": {
+          "type": "string",
+          "description": "Optional separate negative prompt, max 4000 characters. Empty by default; do not invent a stock list of prohibitions."
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_qwen_image_2_1_pro": {
+    "name": "drawer_qwen_image_2_1_pro",
+    "description": "Alibaba qwen-image-2.1-pro only: paid text-to-image and editing from up to 10 reference images. One output per request. start then status with SAME tool/id; no provider fallback. SUCCEEDED returns local media and execution seconds excluding queue/download. Include MEDIA marker in reply. submitting after error means unknown acceptance; never resubmit. Requires profile DASHSCOPE_API_KEY.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "start",
+            "status"
+          ],
+          "description": "Submit once, or poll the same id until SUCCEEDED."
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable id, 1-64 letters/digits/_/-. Never change id to retry an uncertain POST."
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Positive prompt/edit instruction, 1-4000 characters. Refer to image 1, image 2 in input order."
+        },
+        "images": {
+          "type": "string",
+          "description": "Optional references: up to 10 public HTTPS URLs or absolute local PNG/JPEG/WebP paths, one per line. Local images max 10 MiB; sent to Alibaba as Base64. Use only user-selected images."
+        },
+        "size": {
+          "type": "string",
+          "description": "width*height, default 1024*1024. Pixel area 512²-2048², aspect ratio 1:8 to 8:1."
+        },
+        "seed": {
+          "type": "string",
+          "description": "Optional integer 0-2147483647; omit for random."
+        },
+        "prompt_extend": {
+          "type": "string",
+          "enum": [
+            "false",
+            "true"
+          ],
+          "description": "Default false: no automatic prompt rewriting. true enables provider enhancement/thinking."
         }
       },
       "required": [

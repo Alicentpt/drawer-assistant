@@ -36,6 +36,15 @@ CREATE TABLE IF NOT EXISTS jobs (
 PRAGMA user_version = 2;
 """
 
+ALIBABA_SCHEMA = """
+CREATE TABLE IF NOT EXISTS alibaba_jobs (
+ id TEXT PRIMARY KEY, model TEXT NOT NULL, base TEXT NOT NULL,
+ fingerprint TEXT NOT NULL, request TEXT NOT NULL, task_id TEXT NOT NULL DEFAULT '',
+ state TEXT NOT NULL DEFAULT 'submitting', file TEXT NOT NULL DEFAULT '',
+ generation_seconds TEXT NOT NULL DEFAULT '', error_code TEXT NOT NULL DEFAULT ''
+)
+"""
+
 
 def connect(path: Path) -> sqlite3.Connection:
     """Open a database and migrate missing tables or generation timing metadata.
@@ -66,10 +75,13 @@ def connect(path: Path) -> sqlite3.Connection:
                     "TEXT NOT NULL DEFAULT ''"
                 )
                 database.execute("PRAGMA user_version = 2")
+            if version in (0, 1, 2):
+                database.execute(ALIBABA_SCHEMA)
+                database.execute("PRAGMA user_version = 3")
     except sqlite3.Error, ValueError:
         database.close()
         raise
-    if version not in (0, 1, 2):
+    if version not in (0, 1, 2, 3):
         database.close()
         message = "Unsupported database version; update Drawer Assistant."
         raise ValueError(message)

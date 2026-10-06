@@ -94,8 +94,8 @@ Python для cron — `.venv` проекта: после переноса па�
 после успешной отправки может привести к повторному сообщению.
 
 `drawer_orders` — создать/изменить/показать; `drawer_references` — сохранить/показать
-ссылки с заметками; `drawer_generate` — поставить генерацию/получить результат.
-Поиск и облачная генерация используют штатные инструменты Hermes.
+ссылки с заметками; `drawer_zimage` / `drawer_flux_klein` — отдельные GPU-модели.
+Поиск и ChatGPT-генерация используют штатные инструменты Hermes.
 `drawer_persona` показывает текущий `SOUL.md` установленного профиля. Он доступен
 по просьбе «покажи свою персону» и не принимает произвольные пути. Постоянная
 память Hermes хранится отдельно; её обновление не редактирует файл персоны.
@@ -112,6 +112,54 @@ ComfyUI в секундах (без очереди и передачи файл�
 `-X utf8` при установке Git hook нужен для кириллицы в пути Windows.
 Для PR нужен вход в [GitHub CLI](https://cli.github.com/) через `gh auth login`
 либо создание PR в браузере; SSH-ключ сам по себе CLI не авторизует.
+
+## Alibaba: отдельный инструмент для каждой модели
+
+| Инструмент | Модель | Референсы | Negative prompt |
+| --- | --- | --- | --- |
+| `drawer_qwen_image_3` | Qwen Image 3.0 | До 3 | Да |
+| `drawer_qwen_image_3_pro` | Qwen Image 3.0 Pro | До 3 | Да |
+| `drawer_qwen_image_2_1_pro` | Qwen Image 2.1 Pro | До 10 | Нет |
+
+Генерация и редактирование — одним и тем же инструментом: без images это
+text-to-image, с images — правка/композиция по референсам. images принимает
+HTTPS-ссылки или абсолютные локальные пути, по одному на строку. Локальные
+PNG/JPEG/WebP до 10 MiB кодируются в Base64; исходники передаются в Alibaba.
+Порядок соответствует «image 1», «image 2». Это референсы, а не жёсткий ControlNet.
+
+Заполни `DASHSCOPE_API_KEY` и `DASHSCOPE_BASE_URL` в `.env`, затем выполни
+`uv run drawer-setup` и перезапусти общий gateway. Получение ключа:
+[Alibaba Model Studio](https://www.alibabacloud.com/help/en/model-studio/get-api-key).
+Ключ и endpoint должны совпадать по региону; в примере Singapore. Ключ остаётся
+в .env профиля, не попадает в settings.json, Git, промпт или Telegram.
+
+Промпт для группы с двумя прикреплёнными картинками:
+
+> Через Qwen Image 3.0 сделай референс: поза и композиция с первой картинки,
+> персонажи и палитра со второй. Две взрослые ведьмы спорят за одну метлу,
+> игривый Хэллоуин. Positive: dynamic composition, warm pumpkin light.
+> Negative: blurred hands, unreadable text. Не дополняй промпт автоматически.
+
+По умолчанию один результат, 1024×1024, `prompt_extend=false`, пустой negative.
+Можно задать size, seed и включить prompt_extend. Не меняем провайдера молча.
+start сохраняет намерение до платного запроса; status сохраняет PNG и серверные
+секунды исполнения (без очереди/скачивания). submitting после потери ответа не
+повторяет генерацию. Задания/ссылки Alibaba живут 24 часа: опроси результат вовремя.
+Пока status не вызван, отдельный фоновый загрузчик картинки не работает.
+
+По официальным тарифам Singapore на 06.10.2026: Qwen 3.0 — $0.03 за результат;
+3.0 Pro — $0.04 (1K) / $0.075 (2K); у обеих дополнительно $0.003 за входную
+картинку. Qwen 2.1 Pro — $0.04 за результат. Тарифы могут меняться:
+[3.0](https://www.alibabacloud.com/help/en/model-studio/qwen-image-3-0),
+[3.0 Pro](https://www.alibabacloud.com/help/en/model-studio/qwen-image-3-0-pro),
+[2.1 Pro](https://www.alibabacloud.com/help/en/model-studio/qwen-image-2-1-pro).
+Все запросы проходят модерацию Alibaba; negative prompt не отключает фильтры.
+
+Используется [DashScope async API](https://www.alibabacloud.com/help/en/model-studio/qwen-image-generation-and-editing-api-reference).
+У Alibaba также есть [Wan 2.7](https://www.alibabacloud.com/help/en/model-studio/wan-image-generation-and-editing-api-reference):
+до 9 референсов, без отдельного negative, Pro умеет 4K text-to-image.
+Wan пока не подключён. Моками проверены протокол и сбои; живое качество/скорость
+Qwen до добавления ключа не подтверждены.
 
 ## GPU-сервер и ComfyUI
 

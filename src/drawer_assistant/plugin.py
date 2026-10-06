@@ -8,7 +8,8 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from . import comfy
+from . import alibaba, comfy
+from .alibaba_inputs import InputError
 from .network import object_map
 from .store import orders, references
 
@@ -72,6 +73,48 @@ class PluginContext(Protocol):  # pylint: disable=too-few-public-methods
         return NotImplemented
 
 
+def gpu_tool(
+    path: Path, base: str, tool: str, arguments: dict[str, str]
+) -> dict[str, str]:
+    """Bind each ComfyUI model tool to its own fixed workflow for start and status.
+
+    Args:
+        path (Path): Artist database.
+        base (str): Configured ComfyUI URL.
+        tool (str): Registered model-specific tool or legacy drawer_generate.
+        arguments (dict[str, str]): Action, id and optional generation prompt.
+
+    Returns:
+        dict[str, str]: ComfyUI job metadata and available image.
+
+    Raises:
+        ValueError: Action, arguments, API response or database schema is invalid.
+        KeyError: Tool, required argument or API field is unknown.
+        OSError: Database, workflow, random source or result cannot be accessed.
+        UnicodeError: Workflow or API response cannot be decoded.
+        TypeError: An API graph cannot be serialized.
+        RuntimeError: ComfyUI fails or GPU-only mode is not enabled.
+        sqlite3.Error: Database operations fail.
+    """  # noqa: DOC503 - Delegated generation and storage errors propagate.
+    workflows = {
+        "drawer_zimage": comfy.WORKFLOWS[0],
+        "drawer_flux_klein": comfy.WORKFLOWS[1],
+        "drawer_generate": arguments.get("workflow", comfy.WORKFLOWS[0]),
+    }
+    workflow_name = workflows[tool]
+    if arguments.get("action") == "start":
+        return comfy.start(path, base, {**arguments, "workflow": workflow_name})
+    if arguments.get("action") == "status":
+        return comfy.status(
+            path,
+            base,
+            arguments["id"],
+            workflow_name="" if tool == "drawer_generate" else workflow_name,
+        )
+    message = "Use start or status."
+    raise ValueError(message)
+
+
 def handle(
     params: dict[str, object], *, tool: str, settings_file: Path, **context: object
 ) -> str:
@@ -99,19 +142,24 @@ def handle(
         database = Path(str(settings["database"]))
         base = str(settings["comfy_url"]).rstrip("/")
         result: object
-        if tool == "drawer_orders":
+        if tool in alibaba.TOOLS:
+            result = alibaba.run(
+                database,
+                settings_file.parent.parent.parent,
+                alibaba.TOOLS[tool],
+                arguments,
+            )
+        elif tool == "drawer_orders":
             if arguments.get("action") == "create":
                 arguments.setdefault("timezone", str(settings["timezone"]))
             result = orders(database, arguments)
         elif tool == "drawer_references":
             result = references(database, arguments)
-        elif arguments.get("action") == "start":
-            result = comfy.start(database, base, arguments)
-        elif arguments.get("action") == "status":
-            result = comfy.status(database, base, arguments["id"])
         else:
-            return json.dumps({"error": "Unknown action; use start or status."})
+            result = gpu_tool(database, base, tool, arguments)
         return json.dumps({"result": result}, ensure_ascii=False)
+    except InputError as exc:
+        return json.dumps({"error": "InvalidInput", "hint": str(exc)})
     except (
         OSError,
         ValueError,

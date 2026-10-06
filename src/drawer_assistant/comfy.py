@@ -196,13 +196,16 @@ def save_image(path: Path, base: str, record: dict[str, object], prompt_id: str)
     return str(destination.resolve())
 
 
-def status(path: Path, base: str, identifier: str) -> dict[str, str]:
+def status(
+    path: Path, base: str, identifier: str, *, workflow_name: str = ""
+) -> dict[str, str]:
     """Poll a known generation and save its image locally for Hermes delivery.
 
     Args:
         path (Path): SQLite database filename; images are stored beside it.
         base (str): Operator-configured ComfyUI HTTP(S) base URL.
         identifier (str): Previously submitted stable generation id.
+        workflow_name (str, default=""): Required workflow; empty allows legacy jobs.
 
     Returns:
         dict[str, str]: State, file, MEDIA marker and server generation_seconds;
@@ -210,7 +213,7 @@ def status(path: Path, base: str, identifier: str) -> dict[str, str]:
 
     Raises:
         KeyError: Job or required server response field is absent.
-        ValueError: Server response JSON, image or database schema is invalid.
+        ValueError: Response, image, schema or selected model does not match the job.
         OSError: Database directory or generated image cannot be written.
         UnicodeError: A server response cannot be decoded.
         sqlite3.Error: A database operation fails.
@@ -224,6 +227,9 @@ def status(path: Path, base: str, identifier: str) -> dict[str, str]:
         if row is None:
             raise KeyError(identifier)
         result = row_values(row)
+        if workflow_name and result["workflow"] != workflow_name:
+            message = "Use the model tool that originally created this job."
+            raise ValueError(message)
         if result["state"] in {"submitting", "failed"}:
             return result
         if not result["file"]:

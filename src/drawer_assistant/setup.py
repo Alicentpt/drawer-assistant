@@ -151,5 +151,5 @@ def main() -> None:
             1, f"Setup failed ({type(exc).__name__}). Check .env and profile.\n"
         )
     parser.exit(
-        0, "Configured: Jess, tools, reminders, one group. Start host gateway.\n"
+        0, "Configured: Jessica, tools, reminders, one group. Start host gateway.\n"
     )

@@ -15,8 +15,9 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import yaml
-from dotenv import dotenv_values
+from dotenv import dotenv_values, set_key
 
+from .alibaba_inputs import endpoint
 from .network import object_map
 
 
@@ -41,12 +42,20 @@ def install_files(profile: Path, env_file: Path) -> None:
     settings = dotenv_values(env_file, interpolate=False, encoding="utf-8-sig")
     timezone = settings.get("DRAWER_TIMEZONE") or "Europe/Kaliningrad"
     ZoneInfo(timezone)
-    configured = settings.get("DRAWER_DATA_DIR") or str(profile / "drawer-data")
-    directory = Path(os.path.expandvars(configured)).expanduser()
+    directory = Path(
+        os.path.expandvars(
+            settings.get("DRAWER_DATA_DIR") or str(profile / "drawer-data")
+        )
+    ).expanduser()
     base = settings.get("COMFYUI_BASE_URL") or "http://127.0.0.1:8188"
     if not directory.is_absolute() or urlsplit(base).scheme not in {"http", "https"}:
         message = "Use an absolute DRAWER_DATA_DIR and an HTTP(S) COMFYUI_BASE_URL."
         raise ValueError(message)
+    if settings.get("DASHSCOPE_BASE_URL"):
+        endpoint(str(settings["DASHSCOPE_BASE_URL"]))
+    for key in ("DASHSCOPE_API_KEY", "DASHSCOPE_BASE_URL"):
+        if key in settings:
+            set_key(profile / ".env", key, settings[key] or "")
     source = Path(__file__).parent
     destination = profile / "plugins/drawer"
     persona = profile / "SOUL.md"
