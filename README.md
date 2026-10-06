@@ -14,7 +14,7 @@ Hermes устанавливает собственный Python. Использ�
 
 ```powershell
 uv sync --locked --no-python-downloads
-uv run pre-commit install
+uv run python -X utf8 -m pre_commit install
 hermes profile create drawer-assistant --no-alias --no-skills
 # Только при первой настройке, если .env ещё нет:
 Copy-Item .env.example .env
@@ -35,6 +35,7 @@ uv run --env-file .env -- hermes.cmd --profile drawer-assistant gateway
 не нужны. Отправь своему боту `/start` для начала диалога.
 Профиль создаётся один раз; если он уже есть, пропусти `profile create`.
 Суффикс `.cmd` нужен для запуска Windows-лаунчера через uv.
+`-X utf8` при установке Git hook нужен для путей с кириллицей в Windows.
 На Linux используй `hermes` и замени `${LOCALAPPDATA}` в `.env` на свой каталог.
 Доступность генерации проверяется на конкретном аккаунте.
 Hermes читает Telegram-переменные; `DRAWER_*` и `COMFYUI_*` пока зарезервированы
