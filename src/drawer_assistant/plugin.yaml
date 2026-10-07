@@ -1,0 +1,17 @@
+name: drawer
+version: "0.1.0"
+description: Jessica — orders, deadlines, references and model-specific image tools.
+python_dependencies:
+  - "tzdata>=2025.3,<2027"
+  # Hermes pins 1.2.2; the plugin only uses the dotenv_values API available there.
+  - "python-dotenv>=1.2.2,<2"
+provides_tools:
+  - drawer_persona
+  - drawer_orders
+  - drawer_references
+  - drawer_zimage
+  - drawer_flux_klein
+  - drawer_qwen_image_3
+  - drawer_qwen_image_3_pro
+  - drawer_qwen_image_2_1_pro
+  - drawer_anima

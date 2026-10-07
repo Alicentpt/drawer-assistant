@@ -1,0 +1,11 @@
+{
+  "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "novaAnimeAM_v20.safetensors", "weight_dtype": "default"}},
+  "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen_3_06b_base.safetensors", "type": "stable_diffusion", "device": "default"}},
+  "3": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_vae.safetensors"}},
+  "4": {"class_type": "CLIPTextEncode", "inputs": {"text": "Two adult witches decorate an autumn art studio with pumpkins, storybook illustration.", "clip": ["2", 0]}},
+  "5": {"class_type": "CLIPTextEncode", "inputs": {"text": "worst quality, low quality, early, old, score_1, score_2, score_3, cartoon, graphic, painting, crayon, graphite, abstract, glitch, deformed, mutated, ugly, disfigured, long body, bad anatomy, bad hands, missing fingers, extra fingers, extra digits, fewer digits, cropped, very displeasing, artist name, blurry, jpeg artifacts, lowres, censor", "clip": ["2", 0]}},
+  "6": {"class_type": "EmptyLatentImage", "inputs": {"width": 512, "height": 512, "batch_size": 1}},
+  "7": {"class_type": "KSampler", "inputs": {"model": ["1", 0], "positive": ["4", 0], "negative": ["5", 0], "latent_image": ["6", 0], "seed": 42, "steps": 25, "cfg": 5.0, "sampler_name": "euler_ancestral", "scheduler": "simple", "denoise": 1.0}},
+  "8": {"class_type": "VAEDecodeTiled", "inputs": {"samples": ["7", 0], "vae": ["3", 0], "tile_size": 512, "overlap": 64, "temporal_size": 64, "temporal_overlap": 8}},
+  "9": {"class_type": "SaveImage", "inputs": {"images": ["8", 0], "filename_prefix": "Jessica/Nova_Anime_AM_v20"}}
+}

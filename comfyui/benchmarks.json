@@ -1,0 +1,74 @@
+[
+  {
+    "workflow": "zimage-w4a8",
+    "gpu_only": true,
+    "width": 1024,
+    "height": 1024,
+    "steps": 8,
+    "seconds": 25.37,
+    "peak_vram_mib_sampled": 4661,
+    "peak_rss_gib_sampled": 4.73,
+    "within_9gb": true,
+    "status": "success"
+  },
+  {
+    "workflow": "zimage-w4a8-abliterated",
+    "gpu_only": true,
+    "width": 1024,
+    "height": 1024,
+    "steps": 8,
+    "seconds": 9.11,
+    "peak_vram_mib_sampled": 5463,
+    "peak_rss_gib_sampled": 4.92,
+    "within_9gb": true,
+    "status": "success"
+  },
+  {
+    "workflow": "krea-int8",
+    "gpu_only": true,
+    "width": 1024,
+    "height": 1024,
+    "steps": 8,
+    "seconds": 66.41,
+    "peak_vram_mib_sampled": 17061,
+    "peak_rss_gib_sampled": 15.18,
+    "within_9gb": false,
+    "status": "success"
+  },
+  {
+    "workflow": "krea-int4",
+    "gpu_only": true,
+    "width": 1024,
+    "height": 1024,
+    "steps": 8,
+    "seconds": 30.66,
+    "peak_vram_mib_sampled": 9950,
+    "peak_rss_gib_sampled": 9.43,
+    "within_9gb": false,
+    "status": "success"
+  },
+  {
+    "workflow": "flux2-klein",
+    "gpu_only": true,
+    "width": 1024,
+    "height": 1024,
+    "steps": 4,
+    "seconds": 15.29,
+    "peak_vram_mib_sampled": 5285,
+    "peak_rss_gib_sampled": 3.79,
+    "within_9gb": true,
+    "status": "success"
+  },
+  {
+    "workflow": "flux2-klein-abliterated",
+    "gpu_only": true,
+    "width": 1024,
+    "height": 1024,
+    "steps": 4,
+    "seconds": 16.84,
+    "peak_vram_mib_sampled": 6427,
+    "peak_rss_gib_sampled": 4.76,
+    "within_9gb": true,
+    "status": "success"
+  }
+]

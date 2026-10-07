@@ -1,0 +1,368 @@
+{
+  "drawer_persona": {
+    "name": "drawer_persona",
+    "description": "Read the current SOUL.md from this bot's installed Hermes profile. Use when asked to show your persona, identity instructions or persona file. Returns its exact text and profile, separately from conversation memory. Read-only; takes no paths or arguments and cannot modify files. Workflow instructions: skill_view(\"drawer-profile\").",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  "drawer_orders": {
+    "name": "drawer_orders",
+    "description": "Persistent orders and deadlines. List before updating an order. create requires id/title; update requires id. Dates use ISO 8601 with offset and timezone. A due change replaces the old reminder; reminder defaults to due unless explicitly provided, empty clears. done/cancelled suppress reminders. Stable create ids prevent duplicate retries. Results include delivery attempts/error state. Workflow instructions: skill_view(\"drawer-orders\"). Use remind_at and the installed worker; never create another cron job.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Operation",
+          "enum": [
+            "list",
+            "create",
+            "update"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable order id, 1-64 letters/digits/_/-"
+        },
+        "title": {
+          "type": "string",
+          "description": "Short order/task title"
+        },
+        "client": {
+          "type": "string",
+          "description": "Client name if supplied"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Brief, scope, price and agreed details as supplied"
+        },
+        "status": {
+          "type": "string",
+          "description": "Lifecycle",
+          "enum": [
+            "open",
+            "done",
+            "cancelled"
+          ]
+        },
+        "due": {
+          "type": "string",
+          "description": "Deadline ISO 8601 with zone offset; empty clears"
+        },
+        "timezone": {
+          "type": "string",
+          "description": "IANA zone, default Europe/Kaliningrad"
+        },
+        "remind_at": {
+          "type": "string",
+          "description": "Reminder ISO timestamp with offset; empty disables"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_references": {
+    "name": "drawer_references",
+    "description": "Persistent references linked to orders. save imports exact image bytes into SQLite from file (Telegram attachment cache or generation result) OR image_url (direct HTTP/S image); PNG/JPEG/WebP/GIF up to 20 MiB. New save requires id/title and an image or source url. url alone stores only a link, never image bytes. Omitted metadata and existing binary are preserved on update. storage=blob confirms durable binary storage; link_only does not. list returns metadata, optional order_id filter. get(id) restores an image from SQLite and returns file plus MEDIA marker for sending or explicitly requested generation. No Base64 in responses. Workflow instructions: skill_view(\"drawer-references\"). Save EVERY album attachment with a separate id; report saved/received counts.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Operation",
+          "enum": [
+            "list",
+            "save",
+            "get"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable reference id, 1-64 letters/digits/_/-"
+        },
+        "title": {
+          "type": "string",
+          "description": "Reference title"
+        },
+        "url": {
+          "type": "string",
+          "description": "Optional source HTTP(S) page URL; provenance only, not downloaded. Can be omitted for file. Defaults to image_url when supplied."
+        },
+        "order_id": {
+          "type": "string",
+          "description": "Existing order id, or empty for general reference"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Why this reference helps: pose, palette, lighting, etc."
+        },
+        "file": {
+          "type": "string",
+          "description": "Absolute local image path from the received Telegram attachment or selected generation. save copies actual bytes into SQLite before confirming success. Mutually exclusive with image_url."
+        },
+        "image_url": {
+          "type": "string",
+          "description": "Direct HTTP(S) image URL to download and store as binary, not a page. Mutually exclusive with file. Never use Telegram token-bearing API URLs; use the cached attachment path."
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_zimage": {
+    "name": "drawer_zimage",
+    "description": "Z-Image Turbo W4A8 with abliterated Qwen only. GPU-only ComfyUI text-to-image, 1024x1024, one image. start with stable id and prompt; poll status with same tool/id. Return MEDIA marker and generation_seconds. Never resubmit uncertain submitting jobs. No editing. Workflow instructions: skill_view(\"drawer-images\").",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Operation",
+          "enum": [
+            "start",
+            "status"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable generation request id"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Image prompt, 1-4000 characters"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_flux_klein": {
+    "name": "drawer_flux_klein",
+    "description": "Flux2 Klein abliterated only. GPU-only ComfyUI text-to-image, 1024x1024, one image. start with stable id and prompt; poll status with same tool/id. Return MEDIA marker and generation_seconds. Never resubmit uncertain submitting jobs. No editing. Workflow instructions: skill_view(\"drawer-images\").",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Operation",
+          "enum": [
+            "start",
+            "status"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable generation request id"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Image prompt, 1-4000 characters"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_qwen_image_3": {
+    "name": "drawer_qwen_image_3",
+    "description": "Alibaba qwen-image-3.0 only: paid text-to-image and editing from up to 3 reference images. One output per request. start then status with SAME tool/id; no provider fallback. SUCCEEDED returns local media and execution seconds excluding queue/download. Include MEDIA marker in reply. submitting after error means unknown acceptance; never resubmit. Requires profile DASHSCOPE_API_KEY. Workflow instructions: skill_view(\"drawer-images\").",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "start",
+            "status"
+          ],
+          "description": "Submit once, or poll the same id until SUCCEEDED."
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable id, 1-64 letters/digits/_/-. Never change id to retry an uncertain POST."
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Positive prompt/edit instruction, 1-4000 characters. Refer to image 1, image 2 in input order."
+        },
+        "images": {
+          "type": "string",
+          "description": "Optional references: up to 3 public HTTPS URLs or absolute local PNG/JPEG/WebP paths, one per line. Local images max 10 MiB; sent to Alibaba as Base64. Use only user-selected images."
+        },
+        "size": {
+          "type": "string",
+          "description": "width*height, default 1024*1024. Pixel area 512²-2048², aspect ratio 1:8 to 8:1."
+        },
+        "seed": {
+          "type": "string",
+          "description": "Optional integer 0-2147483647; omit for random."
+        },
+        "prompt_extend": {
+          "type": "string",
+          "enum": [
+            "false",
+            "true"
+          ],
+          "description": "Default false: no automatic prompt rewriting. true enables provider enhancement/thinking."
+        },
+        "negative_prompt": {
+          "type": "string",
+          "description": "Optional separate negative prompt, max 4000 characters. Empty by default; do not invent a stock list of prohibitions."
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_qwen_image_3_pro": {
+    "name": "drawer_qwen_image_3_pro",
+    "description": "Alibaba qwen-image-3.0-pro only: paid text-to-image and editing from up to 3 reference images. One output per request. start then status with SAME tool/id; no provider fallback. SUCCEEDED returns local media and execution seconds excluding queue/download. Include MEDIA marker in reply. submitting after error means unknown acceptance; never resubmit. Requires profile DASHSCOPE_API_KEY. Workflow instructions: skill_view(\"drawer-images\").",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "start",
+            "status"
+          ],
+          "description": "Submit once, or poll the same id until SUCCEEDED."
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable id, 1-64 letters/digits/_/-. Never change id to retry an uncertain POST."
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Positive prompt/edit instruction, 1-4000 characters. Refer to image 1, image 2 in input order."
+        },
+        "images": {
+          "type": "string",
+          "description": "Optional references: up to 3 public HTTPS URLs or absolute local PNG/JPEG/WebP paths, one per line. Local images max 10 MiB; sent to Alibaba as Base64. Use only user-selected images."
+        },
+        "size": {
+          "type": "string",
+          "description": "width*height, default 1024*1024. Pixel area 512²-2048², aspect ratio 1:8 to 8:1."
+        },
+        "seed": {
+          "type": "string",
+          "description": "Optional integer 0-2147483647; omit for random."
+        },
+        "prompt_extend": {
+          "type": "string",
+          "enum": [
+            "false",
+            "true"
+          ],
+          "description": "Default false: no automatic prompt rewriting. true enables provider enhancement/thinking."
+        },
+        "negative_prompt": {
+          "type": "string",
+          "description": "Optional separate negative prompt, max 4000 characters. Empty by default; do not invent a stock list of prohibitions."
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_qwen_image_2_1_pro": {
+    "name": "drawer_qwen_image_2_1_pro",
+    "description": "Alibaba qwen-image-2.1-pro only: paid text-to-image and editing from up to 10 reference images. One output per request. start then status with SAME tool/id; no provider fallback. SUCCEEDED returns local media and execution seconds excluding queue/download. Include MEDIA marker in reply. submitting after error means unknown acceptance; never resubmit. Requires profile DASHSCOPE_API_KEY. Workflow instructions: skill_view(\"drawer-images\").",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "start",
+            "status"
+          ],
+          "description": "Submit once, or poll the same id until SUCCEEDED."
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable id, 1-64 letters/digits/_/-. Never change id to retry an uncertain POST."
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Positive prompt/edit instruction, 1-4000 characters. Refer to image 1, image 2 in input order."
+        },
+        "images": {
+          "type": "string",
+          "description": "Optional references: up to 10 public HTTPS URLs or absolute local PNG/JPEG/WebP paths, one per line. Local images max 10 MiB; sent to Alibaba as Base64. Use only user-selected images."
+        },
+        "size": {
+          "type": "string",
+          "description": "width*height, default 1024*1024. Pixel area 512²-2048², aspect ratio 1:8 to 8:1."
+        },
+        "seed": {
+          "type": "string",
+          "description": "Optional integer 0-2147483647; omit for random."
+        },
+        "prompt_extend": {
+          "type": "string",
+          "enum": [
+            "false",
+            "true"
+          ],
+          "description": "Default false: no automatic prompt rewriting. true enables provider enhancement/thinking."
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_anima": {
+    "name": "drawer_anima",
+    "description": "Nova Anime AM v2.0 (Anima) with Qwen3 0.6B Base only. GPU-only text-to-image, 512x512, one image, 25 steps, CFG 5. Code prepends the agreed quality/scenery prefix once and applies the fixed negative; pass only the unchanged scene, without Prompt: labels. start with stable id/prompt, then status with the same tool/id. Return MEDIA and generation_seconds. Never resubmit uncertain submitting jobs. No reference images or editing. Workflow instructions: skill_view(\"drawer-anima\").",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Operation",
+          "enum": [
+            "start",
+            "status"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable generation request id"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Image prompt, 1-4000 characters"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
