@@ -41,7 +41,8 @@ def test_profile_setup(tmp_path: Path) -> None:
     (profile / "auth.json").write_text("oauth-state", encoding="utf-8")
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "TELEGRAM_BOT_TOKEN=123:example\nDRAWER_TELEGRAM_CHAT_ID=-100123\n",
+        "TELEGRAM_BOT_TOKEN=123:example\nDRAWER_TELEGRAM_CHAT_ID=-100123\n"
+        "OPENROUTER_API_KEY=unused-fixture\nDRAWER_OPENROUTER_MODEL=\n",
         encoding="utf-8",
     )
     configure(env_file, profile)
@@ -59,9 +60,112 @@ def test_profile_setup(tmp_path: Path) -> None:
     assert (profile / "config.before-drawer.yaml").read_text("utf-8") == original
     credentials = dotenv_values(profile / ".env")
     assert credentials["TELEGRAM_ALLOWED_USERS"] == ""
+    assert "OPENROUTER_API_KEY" not in credentials
     # Deliberately invalid fixture credential; no live Telegram token in tests.
     assert credentials["TELEGRAM_BOT_TOKEN"] == "123:example"  # noqa: S105
     assert not (tmp_path / "config.yaml").exists()
+
+
+def test_openrouter_profile_setup(tmp_path: Path) -> None:
+    """Switch dialogue providers without switching images or losing profile state.
+
+    Args:
+        tmp_path (Path): Isolated temporary Hermes root.
+
+    Returns:
+        None: Repeated setup preserves data and keeps the key outside YAML.
+
+    Raises:
+        AssertionError: Credentials leak or unrelated settings change.
+        OSError: Temporary files cannot be created or read.
+        UnicodeError: Configuration text cannot be encoded or decoded.
+        ValueError: Setup or a generated mapping is invalid.
+        KeyError: A required setting is missing from generated configuration.
+        yaml.YAMLError: Configuration cannot be parsed.
+    """  # noqa: DOC502 - Exercises setup's filesystem and parser boundaries.
+    profile = tmp_path / "profiles/drawer-assistant"
+    profile.mkdir(parents=True)
+    original = (
+        "model: {provider: openai-codex, default: previous, "
+        "base_url: 'https://chatgpt.com/backend-api/codex', "
+        "api_mode: codex_responses, key_env: OLD_KEY, api: old-fixture}\n"
+        "image_gen: {provider: openai-codex}\n"
+        "provider_routing: {sort: price, models: {other/model: {only: [example]}}}\n"
+        "terminal: {cwd: artist-notes}\n"
+    )
+    config_path = profile / "config.yaml"
+    config_path.write_text(original, encoding="utf-8")
+    (profile / "auth.json").write_text("oauth-state", encoding="utf-8")
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "TELEGRAM_BOT_TOKEN=123:example\nDRAWER_TELEGRAM_CHAT_ID=-100123\n"
+        "DRAWER_OPENROUTER_MODEL=deepseek/deepseek-v4.1-flash\n"
+        "OPENROUTER_API_KEY=fixture-router\n",
+        encoding="utf-8",
+    )
+    configure(env_file, profile)
+    configure(env_file, profile)
+    config = mapping(yaml.safe_load(config_path.read_text("utf-8")))
+    assert mapping(config["model"]) == {
+        "provider": "openrouter",
+        "default": "deepseek/deepseek-v4.1-flash",
+        "base_url": "https://openrouter.ai/api/v1",
+        "api_mode": "chat_completions",
+    }
+    assert config["image_gen"] == {"provider": "openai-codex"}
+    assert config["terminal"] == {"cwd": "artist-notes"}
+    routing = mapping(config["provider_routing"])
+    assert routing["sort"] == "price"
+    models = mapping(routing["models"])
+    assert models["other/model"] == {"only": ["example"]}
+    assert models["deepseek/deepseek-v4.1-flash"] == {"require_parameters": True}
+    credentials = dotenv_values(profile / ".env")
+    assert credentials["OPENROUTER_API_KEY"] == "fixture-router"
+    assert "fixture-router" not in config_path.read_text("utf-8")
+    assert (profile / "auth.json").read_text("utf-8") == "oauth-state"
+    assert (profile / "config.before-drawer.yaml").read_text("utf-8") == original
+    assert not (tmp_path / "config.yaml").exists()
+
+
+@pytest.mark.parametrize(
+    ("model", "key"),
+    [("deepseek/model", ""), ("deepseek/model", "two words"), ("https://bad", "x")],
+)
+def test_invalid_openrouter_preserves_profile(
+    tmp_path: Path, model: str, key: str
+) -> None:
+    """Reject unusable provider settings before any profile files are modified.
+
+    Args:
+        tmp_path (Path): Isolated temporary Hermes root.
+        model (str): Model ID paired with an invalid model or credential.
+        key (str): Credential fixture, never a real API key.
+
+    Returns:
+        None: Existing configuration and credentials are byte-for-byte unchanged.
+
+    Raises:
+        AssertionError: Invalid settings change or create profile files.
+        OSError: Temporary files cannot be created or read.
+        UnicodeError: Configuration text cannot be encoded or decoded.
+        yaml.YAMLError: Configuration cannot be parsed.
+    """  # noqa: DOC502 - Filesystem and parser errors propagate through setup.
+    profile = tmp_path / "profiles/drawer-assistant"
+    profile.mkdir(parents=True)
+    original = "model: {provider: openai-codex}\n"
+    (profile / "config.yaml").write_text(original, encoding="utf-8")
+    (profile / ".env").write_text("EXISTING=keep\n", encoding="utf-8")
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "TELEGRAM_BOT_TOKEN=123:example\nDRAWER_TELEGRAM_CHAT_ID=-100123\n"
+        f"DRAWER_OPENROUTER_MODEL='{model}'\nOPENROUTER_API_KEY='{key}'\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="OPENROUTER"):
+        configure(env_file, profile)
+    assert (profile / "config.yaml").read_text("utf-8") == original
+    assert (profile / ".env").read_text("utf-8") == "EXISTING=keep\n"
+    assert sorted(path.name for path in profile.iterdir()) == [".env", "config.yaml"]
 
 
 @pytest.mark.parametrize("chat", ["", "123", "-100123,-100456", "invite-link", "-0"])

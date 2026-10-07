@@ -41,7 +41,7 @@ def mapping(value: object) -> dict[str, object]:
 def configure(env_file: Path, profile: Path) -> None:
     """Restrict Telegram to one group and copy its token into an existing profile.
 
-    Preserve model/OAuth settings and back up the original config once. Replace
+    Preserve OAuth, optionally select OpenRouter, and back up the config once. Replace
     Telegram settings, including legacy duplicate sections. Write access rules
     before enabling the token; a missing group ID never enables unrestricted use.
 
@@ -72,6 +72,7 @@ def configure(env_file: Path, profile: Path) -> None:
         raise ValueError(message)
     config_path = profile / "config.yaml"
     config = mapping(yaml.safe_load(config_path.read_text(encoding="utf-8-sig")))
+    credential = configure_openrouter(config, settings)
     gateway = mapping(config.get("gateway"))
     gateway.pop("telegram", None)
     for owner in (config, gateway):
@@ -94,6 +95,8 @@ def configure(env_file: Path, profile: Path) -> None:
         shutil.copy2(config_path, backup)
     temporary = profile / "config.drawer.tmp"
     temporary.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
+    if credential:
+        set_key(profile / ".env", "OPENROUTER_API_KEY", credential)
     temporary.replace(config_path)
     # Empty user grants avoid authorizing DMs; allow_from=[] also blocks old pairings.
     credentials = {
@@ -108,8 +111,57 @@ def configure(env_file: Path, profile: Path) -> None:
         "TELEGRAM_REQUIRE_MENTION": "true",
         "TELEGRAM_BOT_TOKEN": token,
     }
-    for key, value in credentials.items():
-        set_key(profile / ".env", key, value)
+    for key, credential in credentials.items():
+        set_key(profile / ".env", key, credential)
+
+
+def configure_openrouter(
+    config: dict[str, object], settings: dict[str, str | None]
+) -> str:
+    """Select Hermes' native OpenRouter provider only with an explicit model and key.
+
+    Mutate the in-memory config after validation; leave image tools, OAuth and
+    unrelated settings intact. Credentials are returned separately for dotenv.
+
+    Args:
+        config (dict[str, object]): Parsed Hermes profile configuration to update.
+        settings (dict[str, str | None]): Project dotenv values; an empty
+            DRAWER_OPENROUTER_MODEL leaves the current model and credentials intact.
+
+    Returns:
+        str: Validated API key to save in the profile, or empty when not selected.
+
+    Raises:
+        ValueError: Model ID, API key or an existing configuration mapping is invalid.
+    """
+    model_id = (settings.get("DRAWER_OPENROUTER_MODEL") or "").strip()
+    if not model_id:
+        return ""
+    key = (settings.get("OPENROUTER_API_KEY") or "").strip()
+    if not re.fullmatch(r"[\w.-]+/[\w.:-]+", model_id):
+        message = "DRAWER_OPENROUTER_MODEL must be an OpenRouter author/model ID."
+        raise ValueError(message)
+    if not key or any(character.isspace() for character in key):
+        message = "Fill OPENROUTER_API_KEY before selecting an OpenRouter model."
+        raise ValueError(message)
+    model = mapping(config.get("model")).copy()
+    routing = mapping(config.get("provider_routing")).copy()
+    models = mapping(routing.get("models")).copy()
+    route = mapping(models.get(model_id)).copy()
+    # Native Hermes clears stale custom-provider credential pointers on switches.
+    for field in ("api_key", "api", "key_env", "api_key_env"):
+        model.pop(field, None)
+    model.update(
+        provider="openrouter",
+        default=model_id,
+        base_url="https://openrouter.ai/api/v1",
+        api_mode="chat_completions",
+    )
+    route["require_parameters"] = True
+    models[model_id] = route
+    routing["models"] = models
+    config.update(model=model, provider_routing=routing)
+    return key
 
 
 def main() -> None:
