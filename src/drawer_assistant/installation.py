@@ -55,8 +55,11 @@ def install_files(profile: Path, env_file: Path) -> None:
         )
     ).expanduser()
     base = settings.get("COMFYUI_BASE_URL") or "http://127.0.0.1:8188"
-    if not directory.is_absolute() or urlsplit(base).scheme not in {"http", "https"}:
-        message = "Use an absolute DRAWER_DATA_DIR and an HTTP(S) COMFYUI_BASE_URL."
+    anima_base = settings.get("COMFYUI_ANIMA_BASE_URL") or base
+    if not directory.is_absolute() or any(
+        urlsplit(url).scheme not in {"http", "https"} for url in (base, anima_base)
+    ):
+        message = "Use absolute DRAWER_DATA_DIR and HTTP(S) COMFYUI_*BASE_URL values."
         raise ValueError(message)
     if settings.get("DASHSCOPE_BASE_URL"):
         endpoint(str(settings["DASHSCOPE_BASE_URL"]))
@@ -84,13 +87,13 @@ def install_files(profile: Path, env_file: Path) -> None:
                 "database": str(directory / "drawer.sqlite3"),
                 "timezone": timezone,
                 "comfy_url": base,
+                "comfy_anima_url": anima_base,
             }
         ),
         encoding="utf-8",
     )
-    backup = profile / "SOUL.before-drawer.md"
-    if persona.exists() and not backup.exists():
-        shutil.copy2(persona, backup)
+    if persona.exists() and not (profile / "SOUL.before-drawer.md").exists():
+        shutil.copy2(persona, profile / "SOUL.before-drawer.md")
     if update_persona:
         shutil.copy2(source / "SOUL.md", persona)
     scripts = profile / "scripts"

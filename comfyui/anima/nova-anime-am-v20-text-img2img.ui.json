@@ -166,7 +166,7 @@
         "Node name for S&R": "CLIPTextEncode"
       },
       "widgets_values": [
-        "Two adult women wearing witch costumes decorate a cozy autumn art studio with pumpkins. Playful expressions, expressive hands, warm orange and violet colors, illustrated storybook style."
+        "masterpiece, best quality, score_9, score_8, score_7, year 2025, newest, highres, absurdres, very aesthetic, scenery, Two adult women wearing witch costumes decorate a cozy autumn art studio with pumpkins. Playful expressions, expressive hands, warm orange and violet colors, illustrated storybook style."
       ]
     },
     {
@@ -204,7 +204,7 @@
         "Node name for S&R": "CLIPTextEncode"
       },
       "widgets_values": [
-        "blurry, low quality, jpeg artifacts, text, watermark"
+        "worst quality, low quality, early, old, score_1, score_2, score_3, cartoon, graphic, painting, crayon, graphite, abstract, glitch, deformed, mutated, ugly, disfigured, long body, bad anatomy, bad hands, missing fingers, extra fingers, extra digits, fewer digits, cropped, very displeasing, artist name, blurry, jpeg artifacts, lowres, censor"
       ]
     },
     {

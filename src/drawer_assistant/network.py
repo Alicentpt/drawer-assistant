@@ -100,7 +100,11 @@ def request(
         http_request = Request(  # noqa: S310
             url,
             data=body,
-            headers={"Content-Type": "application/json", **(headers or {})},
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "DrawerAssistant/0.1",
+                **(headers or {}),
+            },
         )
         proxy = (
             ProxyHandler({})

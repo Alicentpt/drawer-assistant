@@ -143,6 +143,8 @@ def handle(
         settings = object_map(json.loads(settings_file.read_text("utf-8")))
         database = Path(str(settings["database"]))
         base = str(settings["comfy_url"]).rstrip("/")
+        if tool == "drawer_anima":
+            base = str(settings.get("comfy_anima_url") or base).rstrip("/")
         result: object
         if tool in alibaba.TOOLS:
             result = alibaba.run(

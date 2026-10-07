@@ -19,6 +19,10 @@ WORKFLOWS = (
     "nova-anime-am-v20",
 )
 EVENT_FIELDS = 2
+ANIMA_PREFIX = (
+    "masterpiece, best quality, score_9, score_8, score_7, year 2025, newest, "
+    "highres, absurdres, very aesthetic, scenery, "
+)
 
 
 def execution_seconds(server_status: dict[str, object]) -> str:
@@ -58,14 +62,15 @@ def execution_seconds(server_status: dict[str, object]) -> str:
 
 
 def workflow(name: str, prompt: str) -> dict[str, object]:
-    """Load a fixed GPU preset and inject the unchanged prompt and a random seed.
+    """Load a GPU preset, apply Anima's requested prefix and choose a random seed.
 
     Args:
         name (str): Allowlisted workflow; Nova uses 512 square, others 1024 square.
-        prompt (str): Nonempty image description, up to 4000 characters.
+        prompt (str): Nonempty description, up to 4000 characters before prefixing.
 
     Returns:
-        dict[str, object]: ComfyUI API graph with batch size one.
+        dict[str, object]: Batch-one graph; Anima gets its prefix exactly once and
+            packaged negative, while other models preserve the supplied prompt.
 
     Raises:
         ValueError: Workflow, prompt or packaged JSON is invalid.
@@ -83,6 +88,8 @@ def workflow(name: str, prompt: str) -> dict[str, object]:
             )
         )
     )
+    if name == "nova-anime-am-v20" and not prompt.startswith(ANIMA_PREFIX):
+        prompt = ANIMA_PREFIX + prompt
     object_map(object_map(graph["4"])["inputs"])["text"] = prompt
     seed_node, seed_field = (
         ("10", "noise_seed") if name.startswith("flux2") else ("7", "seed")

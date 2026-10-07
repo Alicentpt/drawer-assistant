@@ -337,7 +337,7 @@
   },
   "drawer_anima": {
     "name": "drawer_anima",
-    "description": "Nova Anime AM v2.0 (Anima) with Qwen3 0.6B Base only. GPU-only ComfyUI text-to-image, 512x512, one image, 25 steps, CFG 5. Prompt passed unchanged, negative empty. start with stable id and prompt; poll status with same tool/id. Return MEDIA marker and generation_seconds. Never resubmit uncertain submitting jobs. Reference images and editing are not supported by this tool.",
+    "description": "Nova Anime AM v2.0 (Anima) with Qwen3 0.6B Base only. GPU-only ComfyUI text-to-image, 512x512, one image, 25 steps, CFG 5. Automatically prepends the user's quality/scenery prefix once and applies their fixed negative; pass only the scene prompt, without Prompt: labels. Read plugins/drawer/ANIMA.md for the exact preset and prompting instructions. Preserve supplied scene wording. For composing new prompts, use lowercase space-separated tags plus 2+ English sentences; describe each character separately. start with stable id and prompt; poll status with same tool/id. Return MEDIA marker and generation_seconds. Never resubmit uncertain submitting jobs. Reference images and editing are not supported by this tool.",
     "parameters": {
       "type": "object",
       "properties": {

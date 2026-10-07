@@ -256,7 +256,9 @@ def test_install_preserves_data(tmp_path: Path) -> None:
     (tmp_path / "SOUL.md").write_text("original", "utf-8")
     env = tmp_path / ".env"
     env.write_text(
-        "DRAWER_TIMEZONE=Europe/Kaliningrad\nDASHSCOPE_API_KEY=fixture-only\n", "utf-8"
+        "DRAWER_TIMEZONE=Europe/Kaliningrad\nDASHSCOPE_API_KEY=fixture-only\n"
+        "COMFYUI_ANIMA_BASE_URL=https://anima.example\n",
+        "utf-8",
     )
     install_files(tmp_path, env)
     install_files(tmp_path, env)
@@ -270,6 +272,8 @@ def test_install_preserves_data(tmp_path: Path) -> None:
     )
     assert Path(str(settings["database"])).parent == tmp_path / "drawer-data"
     assert "fixture-only" not in json.dumps(settings)
+    assert settings["comfy_anima_url"] == "https://anima.example"
+    assert (tmp_path / "plugins/drawer/ANIMA.md").is_file()
     manifest = object_map(
         yaml.safe_load((tmp_path / "plugins/drawer/plugin.yaml").read_text("utf-8"))
     )
