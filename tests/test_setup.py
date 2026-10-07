@@ -32,6 +32,8 @@ def test_profile_setup(tmp_path: Path) -> None:
     """  # noqa: DOC502 - Tests exercise APIs that raise indirectly.
     profile = tmp_path / "profiles" / "drawer-assistant"
     profile.mkdir(parents=True)
+    host_original = "group_sessions_per_user: true\nmodel: {default: host-model}\n"
+    (tmp_path / "config.yaml").write_text(host_original, encoding="utf-8")
     original = (
         "model: {provider: openai-codex, default: chosen-model}\n"
         "platforms: {telegram: {extra: {allow_from: ['*']}}}\n"
@@ -53,6 +55,11 @@ def test_profile_setup(tmp_path: Path) -> None:
     assert telegram["allowed_chats"] == telegram["group_allowed_chats"] == ["-100123"]
     assert telegram["guest_mode"] is False
     assert telegram["unauthorized_dm_behavior"] == "ignore"
+    assert telegram["dm_policy"] == "disabled"
+    assert telegram["require_mention"] is True
+    assert telegram["observe_unmentioned_group_messages"] is False
+    assert config["group_sessions_per_user"] is False
+    assert config["thread_sessions_per_user"] is False
     assert mapping(config["model"])["default"] == "chosen-model"
     assert "telegram" not in mapping(config["platforms"])
     assert "telegram" not in mapping(mapping(config["gateway"])["platforms"])
@@ -63,7 +70,15 @@ def test_profile_setup(tmp_path: Path) -> None:
     assert "OPENROUTER_API_KEY" not in credentials
     # Deliberately invalid fixture credential; no live Telegram token in tests.
     assert credentials["TELEGRAM_BOT_TOKEN"] == "123:example"  # noqa: S105
-    assert not (tmp_path / "config.yaml").exists()
+    host = mapping(yaml.safe_load((tmp_path / "config.yaml").read_text("utf-8")))
+    assert host == {
+        "group_sessions_per_user": False,
+        "thread_sessions_per_user": False,
+        "model": {"default": "host-model"},
+    }
+    assert (tmp_path / "config.before-drawer-shared-sessions.yaml").read_text(
+        "utf-8"
+    ) == host_original
 
 
 def test_openrouter_profile_setup(tmp_path: Path) -> None:
@@ -124,7 +139,10 @@ def test_openrouter_profile_setup(tmp_path: Path) -> None:
     assert "fixture-router" not in config_path.read_text("utf-8")
     assert (profile / "auth.json").read_text("utf-8") == "oauth-state"
     assert (profile / "config.before-drawer.yaml").read_text("utf-8") == original
-    assert not (tmp_path / "config.yaml").exists()
+    assert mapping(yaml.safe_load((tmp_path / "config.yaml").read_text("utf-8"))) == {
+        "group_sessions_per_user": False,
+        "thread_sessions_per_user": False,
+    }
 
 
 @pytest.mark.parametrize(
@@ -166,6 +184,7 @@ def test_invalid_openrouter_preserves_profile(
     assert (profile / "config.yaml").read_text("utf-8") == original
     assert (profile / ".env").read_text("utf-8") == "EXISTING=keep\n"
     assert sorted(path.name for path in profile.iterdir()) == [".env", "config.yaml"]
+    assert not (tmp_path / "config.yaml").exists()
 
 
 @pytest.mark.parametrize("chat", ["", "123", "-100123,-100456", "invite-link", "-0"])

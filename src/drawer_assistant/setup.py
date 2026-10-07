@@ -41,9 +41,10 @@ def mapping(value: object) -> dict[str, object]:
 def configure(env_file: Path, profile: Path) -> None:
     """Restrict Telegram to one group and copy its token into an existing profile.
 
-    Preserve OAuth, optionally select OpenRouter, and back up the config once. Replace
-    Telegram settings, including legacy duplicate sections. Write access rules
-    before enabling the token; a missing group ID never enables unrestricted use.
+    Preserve OAuth, optionally select OpenRouter, and back up the config once. Share
+    group sessions on the host and profile; replace legacy Telegram settings.
+    Write access rules before enabling the token; a missing group ID never
+    enables unrestricted use.
 
     Args:
         env_file (Path): UTF-8 dotenv file with bot token and negative group ID.
@@ -90,6 +91,8 @@ def configure(env_file: Path, profile: Path) -> None:
         "unauthorized_dm_behavior": "ignore",
         "observe_unmentioned_group_messages": False,
     }
+    configure_shared_sessions(profile.parent.parent)
+    config.update(group_sessions_per_user=False, thread_sessions_per_user=False)
     backup = profile / "config.before-drawer.yaml"
     if not backup.exists():
         shutil.copy2(config_path, backup)
@@ -113,6 +116,38 @@ def configure(env_file: Path, profile: Path) -> None:
     }
     for key, credential in credentials.items():
         set_key(profile / ".env", key, credential)
+
+
+def configure_shared_sessions(host: Path) -> None:
+    """Share group conversations through the host's native Hermes session routing.
+
+    The multiplexed gateway reads these flags from the host, not each profile.
+    Preserve unrelated settings and back up the original once. No histories,
+    credentials, Telegram admission rules or model selections are modified.
+
+    Args:
+        host (Path): Existing Hermes host directory containing profiles/.
+
+    Returns:
+        None: Host routing shares each group/topic across its participants.
+
+    Raises:
+        OSError: Configuration cannot be read, backed up or replaced.
+        UnicodeError: Configuration text is not UTF-8.
+        ValueError: The existing configuration is not a mapping.
+        yaml.YAMLError: The existing configuration is malformed YAML.
+    """  # noqa: DOC502 - File, mapping and parser failures propagate.
+    filename = host / "config.yaml"
+    config = mapping(
+        yaml.safe_load(filename.read_text("utf-8-sig")) if filename.exists() else {}
+    )
+    backup = host / "config.before-drawer-shared-sessions.yaml"
+    if filename.exists() and not backup.exists():
+        shutil.copy2(filename, backup)
+    config.update(group_sessions_per_user=False, thread_sessions_per_user=False)
+    temporary = filename.with_suffix(".drawer.tmp")
+    temporary.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
+    temporary.replace(filename)
 
 
 def configure_openrouter(
