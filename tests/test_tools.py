@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 from drawer_assistant import comfy
-from drawer_assistant.installation import install_files
+from drawer_assistant.installation import install_context, install_files
 from drawer_assistant.network import object_map
 from drawer_assistant.plugin import handle
 from drawer_assistant.references import references
@@ -251,7 +251,9 @@ def test_install_preserves_data(tmp_path: Path) -> None:
         shutil.Error: Plugin files cannot be copied.
     """  # noqa: DOC502 - Installer and test failures propagate.
     (tmp_path / "config.yaml").write_text(
-        "platform_toolsets:\n  telegram: [image_gen]\n", "utf-8"
+        "platform_toolsets:\n  telegram: [image_gen]\n"
+        "skills: {external_dirs: [artist-skills]}\n",
+        "utf-8",
     )
     (tmp_path / "SOUL.md").write_text("original", "utf-8")
     env = tmp_path / ".env"
@@ -265,8 +267,14 @@ def test_install_preserves_data(tmp_path: Path) -> None:
     assert (tmp_path / "SOUL.before-drawer.md").read_text("utf-8") == "original"
     assert "Джессика" in (tmp_path / "SOUL.md").read_text("utf-8")
     (tmp_path / "SOUL.md").write_text("User-edited persona", "utf-8")
+    (tmp_path / ".hermes.md").write_text("User-edited work rules", "utf-8")
+    personal = tmp_path / "skills/personal/SKILL.md"
+    personal.parent.mkdir(parents=True)
+    personal.write_text("Artist's own skill", "utf-8")
     install_files(tmp_path, env)
     assert (tmp_path / "SOUL.md").read_text("utf-8") == "User-edited persona"
+    assert (tmp_path / ".hermes.md").read_text("utf-8") == "User-edited work rules"
+    assert personal.read_text("utf-8") == "Artist's own skill"
     settings = object_map(
         json.loads((tmp_path / "plugins/drawer/settings.json").read_text("utf-8"))
     )
@@ -274,6 +282,17 @@ def test_install_preserves_data(tmp_path: Path) -> None:
     assert "fixture-only" not in json.dumps(settings)
     assert settings["comfy_anima_url"] == "https://anima.example"
     assert (tmp_path / "plugins/drawer/ANIMA.md").is_file()
+    assert (tmp_path / "plugins/drawer/.hermes.md").is_file()
+    assert sorted(
+        path.parent.name
+        for path in (tmp_path / "plugins/drawer/skills").glob("*/SKILL.md")
+    ) == [
+        "drawer-anima",
+        "drawer-images",
+        "drawer-orders",
+        "drawer-profile",
+        "drawer-references",
+    ]
     manifest = object_map(
         yaml.safe_load((tmp_path / "plugins/drawer/plugin.yaml").read_text("utf-8"))
     )
@@ -284,6 +303,10 @@ def test_install_preserves_data(tmp_path: Path) -> None:
     configuration = object_map(
         yaml.safe_load((tmp_path / "config.yaml").read_text("utf-8"))
     )
+    assert object_map(configuration["skills"])["external_dirs"] == [
+        "artist-skills",
+        str((tmp_path / "plugins/drawer/skills").resolve()),
+    ]
     assert object_map(configuration["platform_toolsets"])["telegram"] == [
         "drawer",
         "image_gen",
@@ -300,6 +323,48 @@ def test_install_preserves_data(tmp_path: Path) -> None:
     display = object_map(configuration["display"])
     telegram = object_map(object_map(display["platforms"])["telegram"])
     assert telegram["memory_notifications"] == "off"
+
+
+@pytest.mark.parametrize(
+    ("current", "previous", "expected"),
+    [
+        (None, None, "new"),
+        ("old", "old", "new"),
+        ("custom", "old", "custom"),
+        ("custom", None, "custom"),
+    ],
+)
+def test_context_upgrade(
+    tmp_path: Path, current: str | None, previous: str | None, expected: str
+) -> None:
+    """Upgrade stock work rules without replacing preexisting or edited documents.
+
+    Args:
+        tmp_path (Path): Isolated source and profile fixture root.
+        current (str | None): Active work rules, or None for a new profile.
+        previous (str | None): Last shipped template, or None on first install.
+        expected (str): Active work rules expected after the upgrade.
+
+    Returns:
+        None: Assertions verify the active rules after two installation attempts.
+
+    Raises:
+        OSError: Fixture files cannot be created, read or copied.
+        UnicodeError: Fixture content cannot be encoded or decoded.
+        AssertionError: An upgrade loses edits or fails to install the template.
+    """  # noqa: DOC502 - Installer and assertion exceptions propagate.
+    source = tmp_path / "source"
+    profile = tmp_path / "profile"
+    source.mkdir()
+    (profile / "plugins/drawer").mkdir(parents=True)
+    (source / ".hermes.md").write_text("new", "utf-8")
+    if current is not None:
+        (profile / ".hermes.md").write_text(current, "utf-8")
+    if previous is not None:
+        (profile / "plugins/drawer/.hermes.md").write_text(previous, "utf-8")
+    install_context(profile, source)
+    install_context(profile, source)
+    assert (profile / ".hermes.md").read_text("utf-8") == expected
 
 
 def test_persona_profile_scope(tmp_path: Path) -> None:

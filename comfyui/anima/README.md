@@ -5,7 +5,7 @@
 В Джессике доступен отдельный `drawer_anima` для генерации по тексту: он использует
 [компактный API preset](../../src/drawer_assistant/workflows/nova-anime-am-v20.api.json)
 без LoadImage, с пользовательским positive prefix и фиксированным negative из
-[инструкции Hermes](../../src/drawer_assistant/ANIMA.md). Img2img доступен в UI workflow.
+[навыке Hermes](../../src/drawer_assistant/skills/drawer-anima/SKILL.md). Img2img доступен в UI workflow.
 
 1. Откройте workflow и загрузите картинку в «Заменить на свой референс».
    На настроенном сервере уже есть техническая картинка-заглушка.

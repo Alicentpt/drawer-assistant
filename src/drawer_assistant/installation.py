@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Drawer Assistant contributors.
 # SPDX-License-Identifier: GPL-3.0-only
-"""Install the persona, native tools and a no-agent reminder tick into Hermes."""
+"""Install the persona, skills, native tools and reminder tick into Hermes."""
 
 import json
 import os
@@ -68,6 +68,7 @@ def install_files(profile: Path, env_file: Path) -> None:
             set_key(profile / ".env", key, settings[key] or "")
     source = Path(__file__).parent
     destination = profile / "plugins/drawer"
+    install_context(profile, source)
     persona = profile / "SOUL.md"
     previous_template = destination / "SOUL.md"
     update_persona = (
@@ -108,6 +109,27 @@ def install_files(profile: Path, env_file: Path) -> None:
     configure_toolset(profile)
 
 
+def install_context(profile: Path, source: Path) -> None:
+    """Install project rules, preserving edits made since the previous template.
+
+    Args:
+        profile (Path): Existing Hermes profile and configured working directory.
+        source (Path): Package directory containing the new .hermes.md template.
+
+    Returns:
+        None: Missing or unmodified rules are installed before templates refresh.
+
+    Raises:
+        OSError: A rule file cannot be read or copied.
+    """  # noqa: DOC502 - Filesystem errors propagate.
+    current = profile / ".hermes.md"
+    previous = profile / "plugins/drawer/.hermes.md"
+    if not current.exists() or (
+        previous.exists() and current.read_bytes() == previous.read_bytes()
+    ):
+        shutil.copy2(source / ".hermes.md", current)
+
+
 def configure_toolset(profile: Path) -> None:
     """Select the artist-facing tools without exposing host administration to chat.
 
@@ -115,16 +137,28 @@ def configure_toolset(profile: Path) -> None:
         profile (Path): Existing Hermes profile directory.
 
     Returns:
-        None: Artist/file/skill tools are selected, profile cwd set and notices hidden.
+        None: Tools, bundled skills and profile cwd are selected; notices are hidden.
 
     Raises:
         OSError: Configuration cannot be read or replaced.
         UnicodeError: Configuration is not UTF-8.
-        ValueError: Configuration mappings are malformed.
+        ValueError: Configuration mappings or the external skill directory list
+            are malformed.
         yaml.YAMLError: The configuration YAML is malformed.
-    """  # noqa: DOC502 - Includes propagated config errors.
+    """  # noqa: DOC503 - YAML and filesystem exceptions propagate with ValueError.
     config_file = profile / "config.yaml"
     config = object_map(yaml.safe_load(config_file.read_text("utf-8-sig")))
+    skills = object_map(config.setdefault("skills", {}))
+    directories = skills.setdefault("external_dirs", [])
+    # YAML collections are untyped; validate elements after narrowing to objects.
+    if not isinstance(directories, list) or not all(
+        isinstance(item, str) for item in cast("list[object]", directories)
+    ):
+        message = "skills.external_dirs must be a list of paths."
+        raise ValueError(message)
+    bundled = str((profile / "plugins/drawer/skills").resolve())
+    if bundled not in directories:
+        cast("list[str]", directories).append(bundled)
     platforms = object_map(config.setdefault("platform_toolsets", {}))
     platforms["telegram"] = [
         "drawer",

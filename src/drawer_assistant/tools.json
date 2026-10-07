@@ -1,7 +1,7 @@
 {
   "drawer_persona": {
     "name": "drawer_persona",
-    "description": "Read the current SOUL.md from this bot's installed Hermes profile. Use when asked to show your persona, identity instructions or persona file. Returns its exact text and profile, separately from conversation memory. Read-only; takes no paths or arguments and cannot modify files.",
+    "description": "Read the current SOUL.md from this bot's installed Hermes profile. Use when asked to show your persona, identity instructions or persona file. Returns its exact text and profile, separately from conversation memory. Read-only; takes no paths or arguments and cannot modify files. Workflow instructions: skill_view(\"drawer-profile\").",
     "parameters": {
       "type": "object",
       "properties": {},
@@ -10,7 +10,7 @@
   },
   "drawer_orders": {
     "name": "drawer_orders",
-    "description": "Persistent orders and deadlines. List before updating an order. create requires id/title; update requires id. Dates use ISO 8601 with offset and timezone. A due change replaces the old reminder; reminder defaults to due unless explicitly provided, empty clears. done/cancelled suppress reminders. Stable create ids prevent duplicate retries. Results include delivery attempts/error state.",
+    "description": "Persistent orders and deadlines. List before updating an order. create requires id/title; update requires id. Dates use ISO 8601 with offset and timezone. A due change replaces the old reminder; reminder defaults to due unless explicitly provided, empty clears. done/cancelled suppress reminders. Stable create ids prevent duplicate retries. Results include delivery attempts/error state. Workflow instructions: skill_view(\"drawer-orders\"). Use remind_at and the installed worker; never create another cron job.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -69,7 +69,7 @@
   },
   "drawer_references": {
     "name": "drawer_references",
-    "description": "Persistent references linked to orders. save imports exact image bytes into SQLite from file (Telegram attachment cache or generation result) OR image_url (direct HTTP/S image); PNG/JPEG/WebP/GIF up to 20 MiB. New save requires id/title and an image or source url. url alone stores only a link, never image bytes. Omitted metadata and existing binary are preserved on update. storage=blob confirms durable binary storage; link_only does not. list returns metadata, optional order_id filter. get(id) restores an image from SQLite and returns file plus MEDIA marker for sending or explicitly requested generation. No Base64 in responses.",
+    "description": "Persistent references linked to orders. save imports exact image bytes into SQLite from file (Telegram attachment cache or generation result) OR image_url (direct HTTP/S image); PNG/JPEG/WebP/GIF up to 20 MiB. New save requires id/title and an image or source url. url alone stores only a link, never image bytes. Omitted metadata and existing binary are preserved on update. storage=blob confirms durable binary storage; link_only does not. list returns metadata, optional order_id filter. get(id) restores an image from SQLite and returns file plus MEDIA marker for sending or explicitly requested generation. No Base64 in responses. Workflow instructions: skill_view(\"drawer-references\"). Save EVERY album attachment with a separate id; report saved/received counts.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -119,7 +119,7 @@
   },
   "drawer_zimage": {
     "name": "drawer_zimage",
-    "description": "Z-Image Turbo W4A8 with abliterated Qwen only. GPU-only ComfyUI text-to-image, 1024x1024, one image. start with stable id and prompt; poll status with same tool/id. Return MEDIA marker and generation_seconds. Never resubmit uncertain submitting jobs. No editing.",
+    "description": "Z-Image Turbo W4A8 with abliterated Qwen only. GPU-only ComfyUI text-to-image, 1024x1024, one image. start with stable id and prompt; poll status with same tool/id. Return MEDIA marker and generation_seconds. Never resubmit uncertain submitting jobs. No editing. Workflow instructions: skill_view(\"drawer-images\").",
     "parameters": {
       "type": "object",
       "properties": {
@@ -149,7 +149,7 @@
   },
   "drawer_flux_klein": {
     "name": "drawer_flux_klein",
-    "description": "Flux2 Klein abliterated only. GPU-only ComfyUI text-to-image, 1024x1024, one image. start with stable id and prompt; poll status with same tool/id. Return MEDIA marker and generation_seconds. Never resubmit uncertain submitting jobs. No editing.",
+    "description": "Flux2 Klein abliterated only. GPU-only ComfyUI text-to-image, 1024x1024, one image. start with stable id and prompt; poll status with same tool/id. Return MEDIA marker and generation_seconds. Never resubmit uncertain submitting jobs. No editing. Workflow instructions: skill_view(\"drawer-images\").",
     "parameters": {
       "type": "object",
       "properties": {
@@ -179,7 +179,7 @@
   },
   "drawer_qwen_image_3": {
     "name": "drawer_qwen_image_3",
-    "description": "Alibaba qwen-image-3.0 only: paid text-to-image and editing from up to 3 reference images. One output per request. start then status with SAME tool/id; no provider fallback. SUCCEEDED returns local media and execution seconds excluding queue/download. Include MEDIA marker in reply. submitting after error means unknown acceptance; never resubmit. Requires profile DASHSCOPE_API_KEY.",
+    "description": "Alibaba qwen-image-3.0 only: paid text-to-image and editing from up to 3 reference images. One output per request. start then status with SAME tool/id; no provider fallback. SUCCEEDED returns local media and execution seconds excluding queue/download. Include MEDIA marker in reply. submitting after error means unknown acceptance; never resubmit. Requires profile DASHSCOPE_API_KEY. Workflow instructions: skill_view(\"drawer-images\").",
     "parameters": {
       "type": "object",
       "properties": {
@@ -233,7 +233,7 @@
   },
   "drawer_qwen_image_3_pro": {
     "name": "drawer_qwen_image_3_pro",
-    "description": "Alibaba qwen-image-3.0-pro only: paid text-to-image and editing from up to 3 reference images. One output per request. start then status with SAME tool/id; no provider fallback. SUCCEEDED returns local media and execution seconds excluding queue/download. Include MEDIA marker in reply. submitting after error means unknown acceptance; never resubmit. Requires profile DASHSCOPE_API_KEY.",
+    "description": "Alibaba qwen-image-3.0-pro only: paid text-to-image and editing from up to 3 reference images. One output per request. start then status with SAME tool/id; no provider fallback. SUCCEEDED returns local media and execution seconds excluding queue/download. Include MEDIA marker in reply. submitting after error means unknown acceptance; never resubmit. Requires profile DASHSCOPE_API_KEY. Workflow instructions: skill_view(\"drawer-images\").",
     "parameters": {
       "type": "object",
       "properties": {
@@ -287,7 +287,7 @@
   },
   "drawer_qwen_image_2_1_pro": {
     "name": "drawer_qwen_image_2_1_pro",
-    "description": "Alibaba qwen-image-2.1-pro only: paid text-to-image and editing from up to 10 reference images. One output per request. start then status with SAME tool/id; no provider fallback. SUCCEEDED returns local media and execution seconds excluding queue/download. Include MEDIA marker in reply. submitting after error means unknown acceptance; never resubmit. Requires profile DASHSCOPE_API_KEY.",
+    "description": "Alibaba qwen-image-2.1-pro only: paid text-to-image and editing from up to 10 reference images. One output per request. start then status with SAME tool/id; no provider fallback. SUCCEEDED returns local media and execution seconds excluding queue/download. Include MEDIA marker in reply. submitting after error means unknown acceptance; never resubmit. Requires profile DASHSCOPE_API_KEY. Workflow instructions: skill_view(\"drawer-images\").",
     "parameters": {
       "type": "object",
       "properties": {
@@ -337,7 +337,7 @@
   },
   "drawer_anima": {
     "name": "drawer_anima",
-    "description": "Nova Anime AM v2.0 (Anima) with Qwen3 0.6B Base only. GPU-only ComfyUI text-to-image, 512x512, one image, 25 steps, CFG 5. Automatically prepends the user's quality/scenery prefix once and applies their fixed negative; pass only the scene prompt, without Prompt: labels. Read plugins/drawer/ANIMA.md for the exact preset and prompting instructions. Preserve supplied scene wording. For composing new prompts, use lowercase space-separated tags plus 2+ English sentences; describe each character separately. start with stable id and prompt; poll status with same tool/id. Return MEDIA marker and generation_seconds. Never resubmit uncertain submitting jobs. Reference images and editing are not supported by this tool.",
+    "description": "Nova Anime AM v2.0 (Anima) with Qwen3 0.6B Base only. GPU-only text-to-image, 512x512, one image, 25 steps, CFG 5. Code prepends the agreed quality/scenery prefix once and applies the fixed negative; pass only the unchanged scene, without Prompt: labels. start with stable id/prompt, then status with the same tool/id. Return MEDIA and generation_seconds. Never resubmit uncertain submitting jobs. No reference images or editing. Workflow instructions: skill_view(\"drawer-anima\").",
     "parameters": {
       "type": "object",
       "properties": {
