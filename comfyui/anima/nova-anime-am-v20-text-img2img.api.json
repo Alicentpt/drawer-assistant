@@ -1,0 +1,247 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "novaAnimeAM_v20.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "Nova Anime AM v2.0 (Anima)"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_06b_base.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "Текстовый энкодер Anima"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "_meta": {
+      "title": "VAE Anima"
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "Two adult women wearing witch costumes decorate a cozy autumn art studio with pumpkins. Playful expressions, expressive hands, warm orange and violet colors, illustrated storybook style.",
+      "clip": [
+        "2",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Что нарисовать — общий промпт"
+    }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "blurry, low quality, jpeg artifacts, text, watermark",
+      "clip": [
+        "2",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Негативный промпт"
+    }
+  },
+  "6": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 512,
+      "height": 512,
+      "batch_size": 1
+    },
+    "_meta": {
+      "title": "Чистый текст → изображение"
+    }
+  },
+  "7": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "jessica_anima_reference_placeholder.png"
+    },
+    "_meta": {
+      "title": "Заменить на свой референс"
+    }
+  },
+  "8": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "upscale_method": "bicubic",
+      "width": 512,
+      "height": 512,
+      "crop": "center",
+      "image": [
+        "7",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Размер референса: 512 × 512"
+    }
+  },
+  "9": {
+    "class_type": "VAEEncodeTiled",
+    "inputs": {
+      "tile_size": 512,
+      "overlap": 64,
+      "temporal_size": 64,
+      "temporal_overlap": 8,
+      "pixels": [
+        "8",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Референс → latent"
+    }
+  },
+  "10": {
+    "class_type": "ComfySwitchNode",
+    "inputs": {
+      "switch": [
+        "11",
+        0
+      ],
+      "on_false": [
+        "6",
+        0
+      ],
+      "on_true": [
+        "9",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Выбор начального изображения"
+    }
+  },
+  "11": {
+    "class_type": "PrimitiveBoolean",
+    "inputs": {
+      "value": false
+    },
+    "_meta": {
+      "title": "РЕФЕРЕНС: выкл = только текст"
+    }
+  },
+  "12": {
+    "class_type": "PrimitiveFloat",
+    "inputs": {
+      "value": 1.0
+    },
+    "_meta": {
+      "title": "Для текста: denoise = 1"
+    }
+  },
+  "13": {
+    "class_type": "PrimitiveFloat",
+    "inputs": {
+      "value": 0.6
+    },
+    "_meta": {
+      "title": "Сила перерисовки референса"
+    }
+  },
+  "14": {
+    "class_type": "ComfySwitchNode",
+    "inputs": {
+      "switch": [
+        "11",
+        0
+      ],
+      "on_false": [
+        "12",
+        0
+      ],
+      "on_true": [
+        "13",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Denoise выбранного режима"
+    }
+  },
+  "15": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 20261007,
+      "steps": 25,
+      "cfg": 5.0,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "simple",
+      "denoise": [
+        "14",
+        0
+      ],
+      "model": [
+        "1",
+        0
+      ],
+      "positive": [
+        "4",
+        0
+      ],
+      "negative": [
+        "5",
+        0
+      ],
+      "latent_image": [
+        "10",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Anima — seed / шаги / CFG"
+    }
+  },
+  "16": {
+    "class_type": "VAEDecodeTiled",
+    "inputs": {
+      "tile_size": 512,
+      "overlap": 64,
+      "temporal_size": 64,
+      "temporal_overlap": 8,
+      "samples": [
+        "15",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Декодирование плитками на GPU"
+    }
+  },
+  "17": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "Jessica/Nova_Anime_AM_v20",
+      "images": [
+        "16",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Готовое изображение"
+    }
+  }
+}

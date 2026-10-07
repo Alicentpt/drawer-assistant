@@ -2,6 +2,8 @@
 
 [Установка на Windows 11 / RTX 3080: Comfy Desktop, Tailscale, модели и ноды](WINDOWS.md).
 
+[Nova Anime AM v2.0 (Anima): UI с переключением текст / img2img](anima/README.md).
+
 Тест 06.10.2026: L40, ComfyUI `7ddf9a4f8aef66bca2eda1be2b936965be12b3b0`,
 PyTorch 2.14.1+cu130. Штатные nodes, batch 1, 1024×1024, tiled VAE 512.
 Каждый замер — новый процесс. `nvidia-smi` опрашивался примерно каждые 0,2 секунды:
