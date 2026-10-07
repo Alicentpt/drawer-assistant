@@ -119,7 +119,7 @@
   },
   "drawer_zimage": {
     "name": "drawer_zimage",
-    "description": "Z-Image W4A8 abliterated only. GPU-only ComfyUI text-to-image, 1024x1024, one image. start with stable id and prompt; poll status with same tool/id. Return MEDIA marker and generation_seconds. Never resubmit uncertain submitting jobs. No editing.",
+    "description": "Z-Image Turbo W4A8 with abliterated Qwen only. GPU-only ComfyUI text-to-image, 1024x1024, one image. start with stable id and prompt; poll status with same tool/id. Return MEDIA marker and generation_seconds. Never resubmit uncertain submitting jobs. No editing.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -326,6 +326,36 @@
             "true"
           ],
           "description": "Default false: no automatic prompt rewriting. true enables provider enhancement/thinking."
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_anima": {
+    "name": "drawer_anima",
+    "description": "Nova Anime AM v2.0 (Anima) with Qwen3 0.6B Base only. GPU-only ComfyUI text-to-image, 512x512, one image, 25 steps, CFG 5. Prompt passed unchanged, negative empty. start with stable id and prompt; poll status with same tool/id. Return MEDIA marker and generation_seconds. Never resubmit uncertain submitting jobs. Reference images and editing are not supported by this tool.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Operation",
+          "enum": [
+            "start",
+            "status"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable generation request id"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Image prompt, 1-4000 characters"
         }
       },
       "required": [

@@ -188,7 +188,33 @@ Qwen до добавления ключа не подтверждены.
 
 ## GPU-сервер и ComfyUI
 
-ComfyUI установлен в `/home/ubuntu/ComfyUI` на предоставленном сервере.
+Для ПК художницы задайте `COMFYUI_BASE_URL=https://ИМЯ-ПК.ИМЯ-СЕТИ.ts.net`
+в локальном `.env`, затем выполните `uv run drawer-setup` и перезапустите gateway.
+Оба ПК должны быть подключены к Tailscale; ComfyUI — запущен с `--gpu-only`.
+Инструменты обращаются к `*.ts.net` напрямую, без системного HTTP-прокси VPN,
+с обычной проверкой HTTPS-сертификата. Маршруты VPN это не изменяет.
+
+| Инструмент | Фиксированная модель | Размер |
+| --- | --- | --- |
+| `drawer_anima` | Nova Anime AM v2.0 + Qwen3 0.6B Base | 512×512 |
+| `drawer_zimage` | Z-Image Turbo W4A8 + abliterated Qwen FP8 | 1024×1024 |
+
+Оба принимают `action`, устойчивый `id` и текстовый `prompt`; start создаёт
+задание, status с тем же id возвращает результат и `generation_seconds`.
+Промпт передаётся без дописывания запретов; Nova использует пустой negative.
+PNG сохраняется локально, ответ содержит MEDIA для отправки в Telegram.
+Нельзя автоматически повторять start с новым id после неизвестного исхода POST.
+Референсы/img2img для Nova пока доступны через [UI workflow](comfyui/anima/README.md).
+
+Примеры для тестовой группы:
+
+> @test_drawerin_assistin_bot через Anima нарисуй двух взрослых ведьм,
+> украшающих мастерскую тыквами. Укажи время генерации.
+
+> @test_drawerin_assistin_bot через Z-Image Turbo нарисуй тот же сюжет.
+
+Альтернативный вариант — старый облачный сервер через SSH. На нём
+ComfyUI установлен в `/home/ubuntu/ComfyUI`.
 Он слушает только серверный `127.0.0.1:8188`. В отдельном PowerShell:
 
 ```powershell

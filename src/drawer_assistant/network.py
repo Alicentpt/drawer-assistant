@@ -72,7 +72,9 @@ def request(
     *,
     headers: dict[str, str] | None = None,
 ) -> bytes:
-    """Make one HTTP request without retrying possibly successful mutations.
+    """Make one bounded request; loopback and Tailscale hosts bypass HTTP proxies.
+
+    Mutations are never retried automatically. TLS verification remains enabled.
 
     Args:
         url (str): HTTP(S) URL supplied by configuration or a fixed API route.
@@ -103,6 +105,7 @@ def request(
         proxy = (
             ProxyHandler({})
             if address.hostname in {"127.0.0.1", "localhost", "::1"}
+            or (address.hostname or "").endswith(".ts.net")
             else ProxyHandler()
         )
         opener = build_opener(proxy, NoRedirect()) if headers else build_opener(proxy)

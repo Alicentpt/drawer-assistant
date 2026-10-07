@@ -13,7 +13,11 @@ from urllib.parse import urlencode
 from .network import api, object_map, request
 from .store import MAX_FIELD, connect, row_values, transaction
 
-WORKFLOWS = ("zimage-w4a8-abliterated", "flux2-klein-abliterated")
+WORKFLOWS = (
+    "zimage-w4a8-abliterated",
+    "flux2-klein-abliterated",
+    "nova-anime-am-v20",
+)
 EVENT_FIELDS = 2
 
 
@@ -54,10 +58,10 @@ def execution_seconds(server_status: dict[str, object]) -> str:
 
 
 def workflow(name: str, prompt: str) -> dict[str, object]:
-    """Load an allowlisted 1024-square workflow and inject text and a random seed.
+    """Load a fixed GPU preset and inject the unchanged prompt and a random seed.
 
     Args:
-        name (str): One of the two tested compact GPU workflow names.
+        name (str): Allowlisted workflow; Nova uses 512 square, others 1024 square.
         prompt (str): Nonempty image description, up to 4000 characters.
 
     Returns:
@@ -81,7 +85,7 @@ def workflow(name: str, prompt: str) -> dict[str, object]:
     )
     object_map(object_map(graph["4"])["inputs"])["text"] = prompt
     seed_node, seed_field = (
-        ("7", "seed") if name.startswith("zimage") else ("10", "noise_seed")
+        ("10", "noise_seed") if name.startswith("flux2") else ("7", "seed")
     )
     object_map(object_map(graph[seed_node])["inputs"])[seed_field] = secrets.randbits(
         32

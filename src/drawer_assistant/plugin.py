@@ -100,6 +100,7 @@ def gpu_tool(
     workflows = {
         "drawer_zimage": comfy.WORKFLOWS[0],
         "drawer_flux_klein": comfy.WORKFLOWS[1],
+        "drawer_anima": comfy.WORKFLOWS[2],
         "drawer_generate": arguments.get("workflow", comfy.WORKFLOWS[0]),
     }
     workflow_name = workflows[tool]

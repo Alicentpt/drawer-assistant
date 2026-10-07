@@ -1,8 +1,10 @@
 # Nova Anime AM v2.0: текст и img2img
 
 [UI workflow](nova-anime-am-v20-text-img2img.ui.json) импортируется в ComfyUI.
-[API workflow](nova-anime-am-v20-text-img2img.api.json) — тот же граф для автоматизации;
-в tools Джессики он пока не подключён.
+[API workflow](nova-anime-am-v20-text-img2img.api.json) — тот же граф для автоматизации.
+В Джессике доступен отдельный `drawer_anima` для генерации по тексту: он использует
+[компактный API preset](../../src/drawer_assistant/workflows/nova-anime-am-v20.api.json)
+без LoadImage, с пустым negative. Img2img доступен в UI workflow.
 
 1. Откройте workflow и загрузите картинку в «Заменить на свой референс».
    На настроенном сервере уже есть техническая картинка-заглушка.

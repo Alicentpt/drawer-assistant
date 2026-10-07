@@ -14,3 +14,4 @@ provides_tools:
   - drawer_qwen_image_3
   - drawer_qwen_image_3_pro
   - drawer_qwen_image_2_1_pro
+  - drawer_anima
