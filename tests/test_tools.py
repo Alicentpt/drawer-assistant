@@ -294,6 +294,7 @@ def test_install_preserves_data(tmp_path: Path) -> None:
         "drawer-order-review",
         "drawer-orders",
         "drawer-profile",
+        "drawer-readable-messages",
         "drawer-references",
     ]
     manifest = object_map(

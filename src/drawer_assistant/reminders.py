@@ -6,17 +6,47 @@ import json
 import re
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
+from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from dotenv import dotenv_values
 
+from .messages import PRIORITIES
 from .network import api, object_map
 from .store import connect, read_orders
 from .time_display import local_time
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+def reminder_text(title: str, deadline: str, priority: str, identifier: str) -> str:
+    """Build a short HTML reminder with separate deadline and priority blocks.
+
+    Args:
+        title (str): Stored order title; escaped so user text cannot insert HTML.
+        deadline (str): Aware ISO deadline, or empty when only a reminder is set.
+        priority (str): Stored priority code 1, 2 or 3.
+        identifier (str): Stable order identifier displayed for follow-up actions.
+
+    Returns:
+        str: Telegram HTML with meaningful bold labels and blank lines.
+
+    Raises:
+        KeyError: Priority is unknown or Moscow timezone data is unavailable.
+        ValueError: A stored deadline is invalid or naive.
+        OverflowError: Deadline conversion exceeds datetime bounds.
+    """  # noqa: DOC502 - Date formatting and label lookups can fail.
+    return "\n\n".join(
+        (
+            f"⏰ <b>Напоминание: {escape(title)}</b>",
+            f"<b>Дедлайн</b>\n{local_time(deadline)}",
+            f"Приоритет: {priority} — {PRIORITIES[priority]}",
+            f"Заказ: #{escape(identifier)}",
+            "Джессика ♡",
+        )
+    )
 
 
 def deliver_due(path: Path, send: Callable[[str], None], now: datetime) -> int:
@@ -28,14 +58,15 @@ def deliver_due(path: Path, send: Callable[[str], None], now: datetime) -> int:
 
     Args:
         path (Path): Orders database filename.
-        send (Callable[[str], None]): Bounded sender; raise RuntimeError on failure.
+        send (Callable[[str], None]): Bounded HTML sender; raises RuntimeError
+            on delivery failure.
         now (datetime): Current aware timestamp used for due checks and retry times.
 
     Returns:
         int: Number of successfully acknowledged sends during this tick.
 
     Raises:
-        ValueError: Now is naive or the database schema version is unsupported.
+        ValueError: Now/deadline is invalid or the database schema is unsupported.
         OSError: The data directory cannot be created.
         sqlite3.Error: Reading or committing the database fails.
         KeyError: Stored timezone or required order field is invalid.
@@ -58,10 +89,8 @@ def deliver_due(path: Path, send: Callable[[str], None], now: datetime) -> int:
                 ).fetchone()
                 if row is None:
                     continue
-                # These labels are intentionally Russian, not mixed-script identifiers.
-                text = (
-                    f"Джессика на связи. {row['title']}\n"
-                    f"Срок: {local_time(row['due'])}\nЗаказ: {identifier}"  # noqa: RUF001
+                text = reminder_text(
+                    row["title"], row["due"], str(row["priority"]), identifier
                 )
                 try:
                     send(text)
@@ -113,10 +142,10 @@ def tick(profile: Path) -> int:
         raise ValueError(message)
 
     def send(text: str) -> None:
-        """Send one plain-text message to the configured group only.
+        """Send one safely formatted HTML message to the configured group only.
 
         Args:
-            text (str): Reminder text without Markdown parsing.
+            text (str): HTML from reminder_text, with user fields escaped.
 
         Returns:
             None: Telegram acknowledged the send.
@@ -127,7 +156,7 @@ def tick(profile: Path) -> int:
         try:
             result = api(
                 f"https://api.telegram.org/bot{token}/sendMessage",
-                {"chat_id": chat, "text": text},
+                {"chat_id": chat, "text": text, "parse_mode": "HTML"},
             )
             if result.get("ok") is not True:
                 message = "Telegram rejected the reminder."

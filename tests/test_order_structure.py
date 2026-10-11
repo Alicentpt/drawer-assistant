@@ -148,18 +148,16 @@ def test_nested_results_and_card(tmp_path: Path) -> None:
     stages(path, {**child, "action": "update", "comments": "Sleeve fixed"})
     card = order_info(path, "halloween")
     text = str(card["text"])
-    assert text.startswith("🎀 **Джессика на связи!** ♡\n✨ **Witches \\*pair\\***")
+    assert text.startswith("🎀 **Witches \\*pair\\***\n\n**Дедлайн**\n")
     assert "31.10.2026 6:00 PM" in text
-    assert "💌 **Заказик:** #halloween" in text
-    separator_count = 2
-    assert text.count("୨୧ ───────────── ୨୧") == separator_count
+    assert "Заказ: #halloween" in text
+    assert "୨୧" not in text
+    assert "\n\n\n" not in text
     assert "Two adult witches, purple palette" in text
     assert "3 — высокий" in text
     assert "Sleeve fixed" in text
-    assert "файл сохранён" in text
-    # Exact Russian signature requested by the artist.
-    signature = "💗 С любовью и заботой,\nтвоя Джессика ♡"  # noqa: RUF001
-    assert text.endswith(signature)
+    assert "Файл сохранён" in text
+    assert text.rsplit("\n\n", maxsplit=1)[-1] == "Джессика ♡"
     assert len(orders(path, {"action": "list"})) == 1
     with transaction(path) as database:
         saved = database.execute(

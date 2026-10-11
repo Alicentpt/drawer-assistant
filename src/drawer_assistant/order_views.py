@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Build read-only order cards and factual seven-day review snapshots."""
 
-import re
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, cast
 
+from .messages import PRIORITIES, markdown, paragraphs
 from .references import METADATA
 from .stages import stage_rows, stage_tree
 from .store import read_orders, row_values, transaction
@@ -14,9 +14,6 @@ from .time_display import TIMEZONE, local_time
 if TYPE_CHECKING:
     from pathlib import Path
 
-PRIORITIES = {"1": "низкий", "2": "средний", "3": "высокий"}
-# The exact ornamental separator was supplied by the user.
-SEPARATOR = "୨୧ ───────────── ୨୧"
 STATUS_LABELS = {
     "open": "в работе",
     "pending": "запланирован",
@@ -25,18 +22,6 @@ STATUS_LABELS = {
     "done": "завершён",
     "cancelled": "отменён",
 }
-
-
-def markdown(value: object) -> str:
-    """Escape stored user text before inserting it into a Markdown card.
-
-    Args:
-        value (object): Stored field value rendered as text.
-
-    Returns:
-        str: Text with Markdown metacharacters escaped.
-    """
-    return re.sub(r"([\\`*_{}\[\]()#+.!|>~-])", r"\\\1", str(value))
 
 
 def describe_stages(tree: list[dict[str, object]], depth: int = 0) -> list[str]:
@@ -58,18 +43,18 @@ def describe_stages(tree: list[dict[str, object]], depth: int = 0) -> list[str]:
     for stage in tree:
         prefix = "  " * depth
         lines.append(
-            f"{prefix}• {markdown(stage['title'])} — "
+            f"{prefix}• **{markdown(stage['title'])}** — "
             f"{STATUS_LABELS[str(stage['status'])]}"
         )
         for field, label in (("description", "Описание"), ("comments", "Комментарии")):
             if stage[field]:
-                lines.append(f"{prefix}  {label}: {markdown(stage[field])}")
+                lines.append(f"{prefix}  {label}:\n{paragraphs(str(stage[field]))}")
         for field, label in (("due", "Срок"), ("completed_at", "Завершён")):
             if stage[field]:
                 lines.append(f"{prefix}  {label}: {local_time(str(stage[field]))}")
         # stage_tree produces these exact nested lists; no untyped external JSON here.
         lines.extend(
-            f"{prefix}  🖼 {markdown(image['title'])}: #{markdown(image['id'])}"
+            f"{prefix}  Картинка: {markdown(image['title'])} — #{markdown(image['id'])}"
             for image in cast("list[dict[str, str]]", stage["images"])
         )
         lines.extend(
@@ -115,8 +100,12 @@ def order_info(path: Path, identifier: str) -> dict[str, object]:
             )
         ]
     body = [
-        f"Статус: {STATUS_LABELS[order['status']]}",
-        f"Приоритет: {order['priority']} — {PRIORITIES[order['priority']]}",
+        f"🎀 **{markdown(order['title'])}**",
+        f"**Дедлайн**\n{local_time(order['due'])}",
+        (
+            f"Приоритет: {order['priority']} — {PRIORITIES[order['priority']]}\n"
+            f"Статус: {STATUS_LABELS[order['status']]}"
+        ),
     ]
     for field, label in (
         ("client", "Клиент"),
@@ -125,26 +114,20 @@ def order_info(path: Path, identifier: str) -> dict[str, object]:
         ("notes", "Заметки"),
     ):
         if order[field]:
-            body.append(f"{label}: {markdown(order[field])}")
+            body.append(f"**{label}**\n{paragraphs(order[field])}")
     if tree:
-        body.extend(["Этапы:", *describe_stages(tree)])
+        body.append("**Этапы**\n\n" + "\n\n".join(describe_stages(tree)))
     if refs:
-        body.append("Референсы:")
-        body.extend(
-            f"• {markdown(ref['title'])} — #{markdown(ref['id'])} "
-            f"({'файл сохранён' if ref['storage'] == 'blob' else 'только ссылка'})"
-            for ref in refs
+        body.append(
+            "**Референсы**\n\n"
+            + "\n\n".join(
+                f"• {markdown(ref['title'])} — #{markdown(ref['id'])}\n"
+                f"{'Файл сохранён' if ref['storage'] == 'blob' else 'Только ссылка'}"
+                for ref in refs
+            )
         )
-    text = (
-        "🎀 **Джессика на связи!** ♡\n"
-        f"✨ **{markdown(order['title'])}**\n"
-        f"🕰 **Дедлайн:** {local_time(order['due'])}\n"
-        f"💌 **Заказик:** #{markdown(identifier)}\n"
-        f"{SEPARATOR}\n"
-        + "\n".join(body)
-        + f"\n{SEPARATOR}\n"
-        + "💗 С любовью и заботой,\nтвоя Джессика ♡"  # noqa: RUF001 - Exact Russian signature.
-    )
+    body.extend([f"Заказ: #{markdown(identifier)}", "Джессика ♡"])
+    text = "\n\n".join(body)
     return {"text": text, "order": {**order, "stages": tree, "references": refs}}
 
 
