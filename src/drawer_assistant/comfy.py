@@ -7,6 +7,7 @@ import re
 import secrets
 from contextlib import closing
 from pathlib import Path
+from time import monotonic, sleep
 from typing import cast
 from urllib.parse import urlencode
 
@@ -23,6 +24,47 @@ ANIMA_PREFIX = (
     "masterpiece, best quality, score_9, score_8, score_7, year 2025, newest, "
     "highres, absurdres, very aesthetic, scenery, "
 )
+
+
+def wait_status(
+    path: Path, base: str, identifier: str, workflow_name: str
+) -> dict[str, str]:
+    """Wait briefly between status checks instead of driving an agent retry loop.
+
+    Args:
+        path (Path): Artist job database filename.
+        base (str): Configured ComfyUI HTTP(S) base URL.
+        identifier (str): Existing stable job id; never submits a new generation.
+        workflow_name (str): Required model workflow for this job.
+
+    Returns:
+        dict[str, str]: Latest job status and available media. Checks are five
+        seconds apart for up to 25 seconds, plus HTTP and download time. Terminal
+        or uncertain submitting states return immediately. Pending jobs include
+        a hint to stop after three status calls and check later without resubmitting.
+
+    Raises:
+        KeyError: Job or required server field is missing.
+        ValueError: Server response, image, schema or selected workflow is invalid.
+        OSError: Database, downloaded image or system clock cannot be accessed.
+        UnicodeError: A server response cannot be decoded.
+        sqlite3.Error: Job storage fails.
+        RuntimeError: A ComfyUI HTTP request fails.
+        TypeError: An API request cannot be serialized.
+    """  # noqa: DOC502 - Status, storage and clock errors propagate indirectly.
+    deadline = monotonic() + 25
+    while True:
+        result = status(path, base, identifier, workflow_name=workflow_name)
+        if result["state"] != "queued":
+            return result
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            result["hint"] = (
+                "Still queued/running. Maximum three status calls per turn; "
+                "then report pending and check later. Never resubmit this job."
+            )
+            return result
+        sleep(min(5, remaining))
 
 
 def execution_seconds(server_status: dict[str, object]) -> str:

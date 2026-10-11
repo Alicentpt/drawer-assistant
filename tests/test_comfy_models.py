@@ -17,6 +17,54 @@ if TYPE_CHECKING:
 
 
 @pytest.mark.parametrize(
+    "states",
+    [
+        ["completed"],
+        ["failed"],
+        ["submitting"],
+        ["queued", "completed"],
+        ["queued"] * 6,
+    ],
+)
+def test_bounded_status_wait(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, states: list[str]
+) -> None:
+    """Space status checks and stop at completion, uncertainty, failure or the budget.
+
+    Args:
+        tmp_path (Path): Unused database location passed to the status mock.
+        monkeypatch (pytest.MonkeyPatch): Replaces the clock, sleeper and status API.
+        states (list[str]): Successive job states returned by the simulated server.
+
+    Returns:
+        None: Polling is bounded and spaced; no start call or real sleep occurs.
+
+    Raises:
+        AssertionError: The wait loop exceeds its budget or changes job identity.
+        KeyError: A result lacks its required state field.
+        ValueError: An unexpected workflow or status argument is supplied.
+    """  # noqa: DOC502 - Mock and assertion failures propagate.
+    status_mock = Mock(side_effect=[{"state": state} for state in states])
+    sleeper = Mock()
+    monkeypatch.setattr(comfy, "status", status_mock)
+    monkeypatch.setattr("drawer_assistant.comfy.sleep", sleeper)
+    monkeypatch.setattr(
+        "drawer_assistant.comfy.monotonic", Mock(side_effect=[0, 0, 5, 10, 15, 20, 25])
+    )
+    database = tmp_path / "jobs.db"
+    result = comfy.wait_status(database, "http://test", "one", "nova-anime-am-v20")
+    assert result["state"] == states[-1]
+    assert status_mock.call_count == len(states)
+    assert sleeper.call_count == len(states) - 1
+    for call in sleeper.call_args_list:
+        assert call.args == (5,)
+    status_mock.assert_called_with(
+        database, "http://test", "one", workflow_name="nova-anime-am-v20"
+    )
+    assert ("hint" in result) == (states[-1] == "queued")
+
+
+@pytest.mark.parametrize(
     ("tool", "expected"),
     [
         (

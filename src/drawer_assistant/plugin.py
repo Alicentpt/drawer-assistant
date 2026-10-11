@@ -110,6 +110,8 @@ def gpu_tool(
     if arguments.get("action") == "start":
         return comfy.start(path, base, {**arguments, "workflow": workflow_name})
     if arguments.get("action") == "status":
+        if tool == "drawer_anima":
+            return comfy.wait_status(path, base, arguments["id"], workflow_name)
         return comfy.status(
             path,
             base,
