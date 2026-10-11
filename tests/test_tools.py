@@ -58,6 +58,9 @@ def test_order_lifecycle(tmp_path: Path) -> None:
     assert deliver_due(database, messages.append, now + timedelta(days=1)) == 1
     assert deliver_due(database, messages.append, now + timedelta(days=1)) == 0
     assert len(messages) == 1
+    before = orders(database, {"action": "list"})[0]
+    after = orders(database, {"action": "update", "id": "portrait", "priority": "3"})[0]
+    assert after == {**before, "priority": "3"}
     orders(database, {"action": "update", "id": "portrait", "status": "done"})
     assert deliver_due(database, messages.append, now + timedelta(days=2)) == 0
     with pytest.raises(ValueError, match="already exists"):
@@ -304,6 +307,15 @@ def test_install_preserves_data(tmp_path: Path) -> None:
         json.loads((tmp_path / "plugins/drawer/tools.json").read_text("utf-8"))
     )
     assert manifest["provides_tools"] == list(schemas)
+    assert set(schemas) == {
+        "drawer_persona",
+        "drawer_orders",
+        "drawer_references",
+        "drawer_anima",
+        "drawer_stages",
+        "drawer_order_info",
+        "drawer_order_digest",
+    }
     configuration = object_map(
         yaml.safe_load((tmp_path / "config.yaml").read_text("utf-8"))
     )
@@ -314,7 +326,6 @@ def test_install_preserves_data(tmp_path: Path) -> None:
     assert object_map(configuration["platform_toolsets"])["telegram"] == [
         "drawer",
         "drawer_read",
-        "image_gen",
         "vision",
         "web",
         "clarify",
@@ -329,11 +340,16 @@ def test_install_preserves_data(tmp_path: Path) -> None:
         "drawer_read",
     ]
     assert configuration["timezone"] == "Europe/Kaliningrad"
+    assert object_map(configuration["cron"])["wrap_response"] is False
+    assert object_map(configuration["cron"])["mirror_delivery"] is True
     album_settings = object_map(object_map(configuration["telegram"])["extra"])
     assert album_settings["drawer_complete_albums"] is True
+    assert album_settings["cron_continuable_surface"] == "in_channel"
     display = object_map(configuration["display"])
     telegram = object_map(object_map(display["platforms"])["telegram"])
     assert telegram["memory_notifications"] == "off"
+    assert telegram["tool_progress"] == "off"
+    assert telegram["show_commentary"] is False
 
 
 @pytest.mark.parametrize(

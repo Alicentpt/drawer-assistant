@@ -218,9 +218,16 @@ HTML-экранированием. Telegram определяет шрифт, р�
 [коротких блоках и главном в начале](https://www.w3.org/WAI/WCAG2/supplemental/patterns/o3p05-succinct-text/)
 и [пространстве между блоками](https://www.w3.org/WAI/WCAG2/supplemental/patterns/o3p10-whitespace/).
 
-`drawer_references` сохраняет картинки и ссылки с заметками;
-`drawer_zimage` / `drawer_flux_klein` — GPU-модели.
-Поиск и ChatGPT-генерация используют штатные инструменты Hermes.
+`drawer_references` сохраняет картинки и ссылки с заметками. Действующий генератор —
+только `drawer_anima`; Z-Image, Flux, Alibaba и штатный ChatGPT image_gen отключены.
+Прежние workflow, результаты и задания не удалены, но агент не получает эти tools.
+Поиск использует штатные инструменты Hermes.
+
+Доставка cron использует `cron.wrap_response: false`: без «Cronjob Response», job_id
+и английской инструкции остановки. `cron.mirror_delivery: true` и Telegram
+`extra.cron_continuable_surface: in_channel` сохраняют сводку в общей истории группы,
+чтобы можно было ответить на неё. Повторные промежуточные сообщения скрыты;
+ошибки и конечный результат остаются видимыми.
 `drawer_persona` показывает текущий `SOUL.md` установленного профиля. Он доступен
 по просьбе «покажи свою персону» и не принимает произвольные пути. Постоянная
 память Hermes хранится отдельно; её обновление не редактирует файл персоны.

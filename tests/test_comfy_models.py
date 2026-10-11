@@ -122,7 +122,6 @@ def test_anima_prefix_is_not_duplicated() -> None:
     ("tool", "override", "expected"),
     [
         ("drawer_anima", "https://anima.example/", "https://anima.example"),
-        ("drawer_zimage", "https://anima.example/", "http://shared"),
         ("drawer_anima", "", "http://shared"),
     ],
 )
@@ -133,7 +132,7 @@ def test_anima_server_routing(
     override: str,
     expected: str,
 ) -> None:
-    """Route start and status to Anima's server without moving other model tools.
+    """Route Anima start and status to the override or shared server.
 
     Args:
         tmp_path (Path): Isolated directory for the settings fixture.
@@ -170,6 +169,55 @@ def test_anima_server_routing(
         )
         assert json.loads(result) == {"result": {"state": "queued"}}
         assert dispatch.call_args.args[1] == expected
+
+
+@pytest.mark.parametrize(
+    "tool",
+    [
+        "drawer_zimage",
+        "drawer_flux_klein",
+        "drawer_qwen_image_3",
+        "drawer_qwen_image_3_pro",
+        "drawer_qwen_image_2_1_pro",
+        "drawer_generate",
+    ],
+)
+def test_disabled_generators(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool: str
+) -> None:
+    """Reject old generator calls from conversation history without submitting jobs.
+
+    Args:
+        tmp_path (Path): Isolated settings and database directory.
+        monkeypatch (pytest.MonkeyPatch): Replaces GPU submission with a spy.
+        tool (str): Removed model-specific or legacy generator name.
+
+    Returns:
+        None: A stale call is rejected before invoking the GPU dispatcher.
+
+    Raises:
+        AssertionError: A disabled call succeeds or submits a job.
+        OSError: Fixture configuration cannot be written.
+        ValueError: The returned JSON cannot be decoded.
+        UnicodeError: Fixture text cannot be encoded.
+    """  # noqa: DOC502 - Fixture creation and assertions can fail indirectly.
+    settings = tmp_path / "settings.json"
+    settings.write_text(
+        json.dumps({"database": str(tmp_path / "jobs.db"), "comfy_url": "http://test"}),
+        "utf-8",
+    )
+    dispatch = Mock()
+    monkeypatch.setattr(plugin, "gpu_tool", dispatch)
+    reply = json.loads(
+        plugin.handle(
+            {"action": "start", "id": "stale", "prompt": "Two witches"},
+            tool=tool,
+            settings_file=settings,
+        )
+    )
+    assert reply["error"] == "UnsupportedTool"
+    dispatch.assert_not_called()
+    assert not (tmp_path / "jobs.db").exists()
 
 
 @pytest.mark.parametrize(

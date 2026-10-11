@@ -255,7 +255,7 @@ def test_validation_and_missing_key(tmp_path: Path) -> None:
             settings_file=settings,
         )
     )
-    assert "DASHSCOPE_API_KEY" in reply["hint"]
+    assert reply["error"] == "UnsupportedTool"  # Provider is not exposed by Hermes.
 
 
 def test_migration_and_fixed_gpu_tools(

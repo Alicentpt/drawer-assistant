@@ -167,7 +167,6 @@ def configure_toolset(profile: Path, timezone: str = TIMEZONE) -> None:
     platforms["telegram"] = [
         "drawer",
         "drawer_read",
-        "image_gen",
         "vision",
         "web",
         "clarify",
@@ -176,14 +175,22 @@ def configure_toolset(profile: Path, timezone: str = TIMEZONE) -> None:
         "skills",
     ]
     configure_cron_tools(config)
+    object_map(config.setdefault("cron", {})).update(
+        wrap_response=False, mirror_delivery=True
+    )
     terminal = object_map(config.setdefault("terminal", {}))
     terminal["cwd"] = str(profile.resolve())
     display = object_map(config.setdefault("display", {}))
     platform_display = object_map(display.setdefault("platforms", {}))
     telegram_display = object_map(platform_display.setdefault("telegram", {}))
     telegram_display["memory_notifications"] = "off"
-    telegram_config = object_map(config.setdefault("telegram", {}))
-    object_map(telegram_config.setdefault("extra", {}))["drawer_complete_albums"] = True
+    telegram_display["tool_progress"] = "off"
+    telegram_display["show_commentary"] = False
+    telegram_extra = object_map(
+        object_map(config.setdefault("telegram", {})).setdefault("extra", {})
+    )
+    telegram_extra["drawer_complete_albums"] = True
+    telegram_extra["cron_continuable_surface"] = "in_channel"
     temporary = config_file.with_suffix(".drawer.tmp")
     temporary.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
     temporary.replace(config_file)

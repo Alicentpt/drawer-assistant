@@ -8,8 +8,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from . import alibaba, comfy
-from .alibaba_inputs import InputError
+from . import comfy
 from .network import object_map
 from .order_views import order_digest, order_info
 from .references import references
@@ -184,14 +183,7 @@ def handle(
         if tool == "drawer_anima":
             base = str(settings.get("comfy_anima_url") or base).rstrip("/")
         result: object
-        if tool in alibaba.TOOLS:
-            result = alibaba.run(
-                database,
-                settings_file.parent.parent.parent,
-                alibaba.TOOLS[tool],
-                arguments,
-            )
-        elif tool in {
+        if tool in {
             "drawer_orders",
             "drawer_references",
             "drawer_stages",
@@ -201,11 +193,16 @@ def handle(
             result = order_tool(
                 database, tool, arguments, str(settings.get("timezone") or TIMEZONE)
             )
-        else:
+        elif tool == "drawer_anima":
             result = gpu_tool(database, base, tool, arguments)
+        else:
+            return json.dumps(
+                {
+                    "error": "UnsupportedTool",
+                    "hint": "Only Anima generation is enabled.",
+                }
+            )
         return json.dumps({"result": result}, ensure_ascii=False)
-    except InputError as exc:
-        return json.dumps({"error": "InvalidInput", "hint": str(exc)})
     except (
         OSError,
         ValueError,
