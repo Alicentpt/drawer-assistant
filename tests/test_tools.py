@@ -315,6 +315,7 @@ def test_install_preserves_data(tmp_path: Path) -> None:
         "drawer_stages",
         "drawer_order_info",
         "drawer_order_digest",
+        "drawer_image_sheet",
     }
     configuration = object_map(
         yaml.safe_load((tmp_path / "config.yaml").read_text("utf-8"))

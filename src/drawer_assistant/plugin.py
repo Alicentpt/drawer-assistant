@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from . import comfy
+from .image_sheet import sheet
 from .network import object_map
 from .order_views import order_digest, order_info
 from .references import references
@@ -160,7 +161,8 @@ def handle(
     """Dispatch a native tool call while containing errors at the host boundary.
 
     Args:
-        params (dict[str, object]): Model-supplied JSON arguments, all string values.
+        params (dict[str, object]): Model-supplied JSON arguments; image sheets accept
+            lists/integers, other tools accept string values only.
         tool (str): Registered tool name selecting the operation.
         settings_file (Path): This installed plugin's profile-local settings file.
         **context (object): Hermes execution metadata; unused by these local tools.
@@ -170,6 +172,18 @@ def handle(
     """
     del context
     try:
+        if tool == "drawer_image_sheet":
+            settings = object_map(json.loads(settings_file.read_text("utf-8")))
+            return json.dumps(
+                {
+                    "result": sheet(
+                        Path(str(settings["database"])).parent / "image-sheets",
+                        params,
+                        str(settings.get("imagemagick_binary") or ""),
+                    )
+                },
+                ensure_ascii=False,
+            )
         if any(not isinstance(value, str) for value in params.values()):
             return json.dumps({"error": "All arguments must be strings."})
         arguments = {key: str(value) for key, value in params.items()}

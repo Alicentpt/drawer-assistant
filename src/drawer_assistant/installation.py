@@ -19,6 +19,7 @@ from dotenv import dotenv_values, set_key
 
 from .alibaba_inputs import endpoint
 from .hermes_compat import patch_telegram
+from .image_sheet import magick_path
 from .network import object_map
 from .time_display import TIMEZONE
 
@@ -91,6 +92,9 @@ def install_files(profile: Path, env_file: Path) -> None:
                 "timezone": timezone,
                 "comfy_url": base,
                 "comfy_anima_url": anima_base,
+                "imagemagick_binary": magick_path(
+                    settings.get("IMAGEMAGICK_BINARY") or ""
+                ),
             }
         ),
         encoding="utf-8",
