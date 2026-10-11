@@ -72,6 +72,7 @@ def test_profile_setup(tmp_path: Path) -> None:
     assert credentials["TELEGRAM_BOT_TOKEN"] == "123:example"  # noqa: S105
     host = mapping(yaml.safe_load((tmp_path / "config.yaml").read_text("utf-8")))
     assert host == {
+        "timezone": "Europe/Moscow",
         "group_sessions_per_user": False,
         "thread_sessions_per_user": False,
         "model": {"default": "host-model"},
@@ -140,6 +141,7 @@ def test_openrouter_profile_setup(tmp_path: Path) -> None:
     assert (profile / "auth.json").read_text("utf-8") == "oauth-state"
     assert (profile / "config.before-drawer.yaml").read_text("utf-8") == original
     assert mapping(yaml.safe_load((tmp_path / "config.yaml").read_text("utf-8"))) == {
+        "timezone": "Europe/Moscow",
         "group_sessions_per_user": False,
         "thread_sessions_per_user": False,
     }

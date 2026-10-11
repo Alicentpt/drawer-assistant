@@ -52,6 +52,16 @@ def save_reference(
     ).fetchone()
     values = {field: str(previous[field]) if previous else "" for field in FIELDS}
     values.update({field: params[field] for field in FIELDS if field in params})
+    if (
+        previous
+        and values["order_id"] != previous["order_id"]
+        and database.execute(
+            "SELECT 1 FROM stage_images WHERE reference_id=?",
+            (identifier,),
+        ).fetchone()
+    ):
+        message = "A stage image cannot move to another order; save a separate copy."
+        raise ValueError(message)
     if params.get("image_url") and "url" not in params:
         values["url"] = params["image_url"]
     has_image = (

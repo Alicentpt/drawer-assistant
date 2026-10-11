@@ -20,6 +20,7 @@ from dotenv import dotenv_values, set_key
 from .alibaba_inputs import endpoint
 from .hermes_compat import patch_telegram
 from .network import object_map
+from .time_display import TIMEZONE
 
 
 def install_files(profile: Path, env_file: Path) -> None:
@@ -47,7 +48,7 @@ def install_files(profile: Path, env_file: Path) -> None:
     )
     if (source / "plugins/platforms/telegram/adapter.py").exists():
         patch_telegram(source)
-    timezone = settings.get("DRAWER_TIMEZONE") or "Europe/Kaliningrad"
+    timezone = settings.get("DRAWER_TIMEZONE") or TIMEZONE
     ZoneInfo(timezone)
     directory = Path(
         os.path.expandvars(
@@ -63,6 +64,7 @@ def install_files(profile: Path, env_file: Path) -> None:
         raise ValueError(message)
     if settings.get("DASHSCOPE_BASE_URL"):
         endpoint(str(settings["DASHSCOPE_BASE_URL"]))
+    set_key(profile / ".env", "HERMES_TIMEZONE", timezone)
     for key in ("DASHSCOPE_API_KEY", "DASHSCOPE_BASE_URL"):
         if key in settings:
             set_key(profile / ".env", key, settings[key] or "")
@@ -106,7 +108,7 @@ def install_files(profile: Path, env_file: Path) -> None:
         "tick(Path(__file__).resolve().parent.parent)\n",
         encoding="utf-8",
     )
-    configure_toolset(profile)
+    configure_toolset(profile, timezone)
 
 
 def install_context(profile: Path, source: Path) -> None:
@@ -130,11 +132,12 @@ def install_context(profile: Path, source: Path) -> None:
         shutil.copy2(source / ".hermes.md", current)
 
 
-def configure_toolset(profile: Path) -> None:
+def configure_toolset(profile: Path, timezone: str = TIMEZONE) -> None:
     """Select the artist-facing tools without exposing host administration to chat.
 
     Args:
         profile (Path): Existing Hermes profile directory.
+        timezone (str, default=TIMEZONE): IANA zone for the native Hermes clock/cron.
 
     Returns:
         None: Tools, bundled skills and profile cwd are selected; notices are hidden.
@@ -148,6 +151,7 @@ def configure_toolset(profile: Path) -> None:
     """  # noqa: DOC503 - YAML and filesystem exceptions propagate with ValueError.
     config_file = profile / "config.yaml"
     config = object_map(yaml.safe_load(config_file.read_text("utf-8-sig")))
+    config["timezone"] = timezone
     skills = object_map(config.setdefault("skills", {}))
     directories = skills.setdefault("external_dirs", [])
     # YAML collections are untyped; validate elements after narrowing to objects.
@@ -162,6 +166,7 @@ def configure_toolset(profile: Path) -> None:
     platforms = object_map(config.setdefault("platform_toolsets", {}))
     platforms["telegram"] = [
         "drawer",
+        "drawer_read",
         "image_gen",
         "vision",
         "web",
@@ -170,6 +175,7 @@ def configure_toolset(profile: Path) -> None:
         "file",
         "skills",
     ]
+    configure_cron_tools(config)
     terminal = object_map(config.setdefault("terminal", {}))
     terminal["cwd"] = str(profile.resolve())
     display = object_map(config.setdefault("display", {}))
@@ -183,11 +189,39 @@ def configure_toolset(profile: Path) -> None:
     temporary.replace(config_file)
 
 
-def cron_identifier(profile: Path) -> str:
+def configure_cron_tools(config: dict[str, object]) -> None:
+    """Select read-only cron tools using Hermes' saved plugin-toolset selection.
+
+    Args:
+        config (dict[str, object]): Mutable profile configuration mapping.
+
+    Returns:
+        None: Both plugin toolsets are known; only drawer_read is enabled for cron.
+
+    Raises:
+        ValueError: Toolset configuration mappings or the known list are malformed.
+    """  # noqa: DOC503 - object_map validates native configuration mappings.
+    object_map(config.setdefault("platform_toolsets", {}))["cron"] = ["drawer_read"]
+    # Hermes auto-enables newly discovered plugin toolsets unless marked known.
+    known = object_map(config.setdefault("known_plugin_toolsets", {}))
+    cron_known = known.setdefault("cron", [])
+    if not isinstance(cron_known, list) or not all(
+        isinstance(item, str) for item in cast("list[object]", cron_known)
+    ):
+        message = "known_plugin_toolsets.cron must be a list of names."
+        raise ValueError(message)
+    for name in ("drawer", "drawer_read"):
+        if name not in cron_known:
+            # The checks above establish a mutable list containing only strings.
+            cast("list[str]", cron_known).append(name)
+
+
+def cron_identifier(profile: Path, name: str = "drawer-reminders") -> str:
     """Find the existing reminder job without modifying Hermes' own cron store.
 
     Args:
         profile (Path): Named Hermes profile directory.
+        name (str, default="drawer-reminders"): Exact name of the managed cron job.
 
     Returns:
         str: Existing job identifier, or an empty string when absent.
@@ -208,22 +242,57 @@ def cron_identifier(profile: Path) -> str:
         raise TypeError(message)
     # Validate the JSON list before narrowing each element with object_map.
     records = [object_map(item) for item in cast("list[object]", jobs)]
-    matching = [item for item in records if item.get("name") == "drawer-reminders"]
+    matching = [item for item in records if item.get("name") == name]
     if len(matching) > 1:
-        message = "Multiple drawer-reminders jobs exist; keep exactly one."
+        message = f"Multiple {name} jobs exist; keep exactly one."
         raise ValueError(message)
     return str(matching[0]["id"]) if matching else ""
 
 
+def cron_command(
+    profile: Path, name: str, schedule: str, prompt: str = ""
+) -> list[str]:
+    """Build an idempotent native cron create/edit command by exact job name.
+
+    Args:
+        profile (Path): Named Hermes profile containing cron metadata.
+        name (str): Stable managed job name.
+        schedule (str): Native Hermes interval or cron expression.
+        prompt (str, default=""): Agent instruction; empty for a script-only job.
+
+    Returns:
+        list[str]: Fixed CLI arguments for creating or editing exactly one job.
+
+    Raises:
+        OSError: Cron metadata cannot be read.
+        UnicodeError: Cron metadata is not UTF-8.
+        ValueError: JSON or matching job multiplicity is invalid.
+        TypeError: Jobs are not stored in a list.
+        KeyError: A matching job lacks its identifier.
+    """  # noqa: DOC502 - Metadata parsing errors propagate.
+    identifier = cron_identifier(profile, name)
+    action = (
+        ["edit", identifier, "--schedule", schedule]
+        if identifier
+        else [
+            "create",
+            schedule,
+        ]
+    )
+    if prompt:
+        action.extend(["--prompt", prompt] if identifier else [prompt])
+    return ["cron", *action, "--name", name]
+
+
 def install(profile: Path, env_file: Path) -> None:
-    """Enable the installed plugin and create or update one native minute cron job.
+    """Enable the plugin, half-hour reminder worker and daily noon order review.
 
     Args:
         profile (Path): Standard named Hermes profile directory.
         env_file (Path): Project dotenv configuration filename.
 
     Returns:
-        None: Plugin admission and reminder scheduling have succeeded.
+        None: Plugin admission and both native cron schedules have succeeded.
 
     Raises:
         RuntimeError: Hermes is missing or rejects/times out during installation.
@@ -242,19 +311,14 @@ def install(profile: Path, env_file: Path) -> None:
         )
         raise RuntimeError(message)
     install_files(profile, env_file)
-    identifier = cron_identifier(profile)
-    schedule = (
-        ["edit", identifier, "--schedule", "every 1m"]
-        if identifier
-        else ["create", "every 1m"]
-    )
+    chat = dotenv_values(profile / ".env").get("TELEGRAM_ALLOWED_CHATS") or ""
+    if not chat.startswith("-") or not chat[1:].isdigit():
+        message = "Daily review requires one permitted Telegram group."
+        raise ValueError(message)
     commands = [
         ["plugins", "enable", "drawer"],
         [
-            "cron",
-            *schedule,
-            "--name",
-            "drawer-reminders",
+            *cron_command(profile, "drawer-reminders", "every 30m"),
             "--no-agent",
             "--script",
             "drawer_tick.py",
@@ -264,6 +328,23 @@ def install(profile: Path, env_file: Path) -> None:
             "local",
             "--failure-deliver",
             "local",
+        ],
+        [
+            *cron_command(
+                profile,
+                "drawer-order-review",
+                "0 12 * * *",
+                "Выполни ежедневную сводку заказов по навыку drawer-order-review. "
+                "Сначала вызови drawer_order_digest; используй полученные данные.",
+            ),
+            "--skill",
+            "drawer-order-review",
+            "--workdir",
+            str(profile.resolve()),
+            "--deliver",
+            f"telegram:{chat}",
+            "--failure-deliver",
+            f"telegram:{chat}",
         ],
     ]
     for arguments in commands:

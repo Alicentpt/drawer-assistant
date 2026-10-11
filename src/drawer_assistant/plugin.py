@@ -11,8 +11,11 @@ from typing import TYPE_CHECKING, Protocol
 from . import alibaba, comfy
 from .alibaba_inputs import InputError
 from .network import object_map
+from .order_views import order_digest, order_info
 from .references import references
+from .stages import stages
 from .store import orders
+from .time_display import TIMEZONE
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -117,6 +120,41 @@ def gpu_tool(
     raise ValueError(message)
 
 
+def order_tool(
+    path: Path, tool: str, arguments: dict[str, str], timezone: str = TIMEZONE
+) -> object:
+    """Dispatch orders, stages, references and read-only views.
+
+    Args:
+        path (Path): Artist database filename.
+        tool (str): Registered order/reference/stage/view tool name.
+        arguments (dict[str, str]): Validated string arguments for the selected tool.
+        timezone (str, default=TIMEZONE): Configured default zone for new orders.
+
+    Returns:
+        object: Nested stages, an order card or the seven-day review snapshot.
+
+    Raises:
+        ValueError: Stage fields, schema, dates or tree are invalid.
+        KeyError: A required field, order, parent, image or stage is missing.
+        OSError: Database files cannot be accessed.
+        sqlite3.Error: Reading or committing data fails.
+        OverflowError: Date conversion exceeds datetime bounds.
+        RuntimeError: Downloading an explicitly selected reference fails.
+    """  # noqa: DOC502 - The selected implementation raises indirectly.
+    if tool == "drawer_orders":
+        if arguments.get("action") == "create":
+            arguments.setdefault("timezone", timezone)
+        return orders(path, arguments)
+    if tool == "drawer_references":
+        return references(path, arguments)
+    if tool == "drawer_stages":
+        return stages(path, arguments)
+    if tool == "drawer_order_info":
+        return order_info(path, arguments["id"])
+    return order_digest(path)
+
+
 def handle(
     params: dict[str, object], *, tool: str, settings_file: Path, **context: object
 ) -> str:
@@ -153,12 +191,16 @@ def handle(
                 alibaba.TOOLS[tool],
                 arguments,
             )
-        elif tool == "drawer_orders":
-            if arguments.get("action") == "create":
-                arguments.setdefault("timezone", str(settings["timezone"]))
-            result = orders(database, arguments)
-        elif tool == "drawer_references":
-            result = references(database, arguments)
+        elif tool in {
+            "drawer_orders",
+            "drawer_references",
+            "drawer_stages",
+            "drawer_order_info",
+            "drawer_order_digest",
+        }:
+            result = order_tool(
+                database, tool, arguments, str(settings.get("timezone") or TIMEZONE)
+            )
         else:
             result = gpu_tool(database, base, tool, arguments)
         return json.dumps({"result": result}, ensure_ascii=False)
@@ -201,7 +243,13 @@ def register(ctx: PluginContext) -> None:
     for tool, value in schemas.items():
         ctx.register_tool(
             name=tool,
-            toolset="drawer",
+            toolset="drawer_read"
+            if tool
+            in {
+                "drawer_order_info",
+                "drawer_order_digest",
+            }
+            else "drawer",
             schema=object_map(value),
             handler=partial(
                 handle, tool=tool, settings_file=directory / "settings.json"

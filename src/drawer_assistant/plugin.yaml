@@ -15,3 +15,6 @@ provides_tools:
   - drawer_qwen_image_3_pro
   - drawer_qwen_image_2_1_pro
   - drawer_anima
+  - drawer_stages
+  - drawer_order_info
+  - drawer_order_digest

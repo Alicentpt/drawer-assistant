@@ -13,6 +13,7 @@ import yaml
 from dotenv import dotenv_values, set_key
 
 from .installation import install
+from .time_display import TIMEZONE
 
 
 def mapping(value: object) -> dict[str, object]:
@@ -92,7 +93,9 @@ def configure(env_file: Path, profile: Path) -> None:
         "observe_unmentioned_group_messages": False,
     }
     configure_shared_sessions(profile.parent.parent)
-    config.update(group_sessions_per_user=False, thread_sessions_per_user=False)
+    config.update(
+        group_sessions_per_user=False, thread_sessions_per_user=False, timezone=TIMEZONE
+    )
     backup = profile / "config.before-drawer.yaml"
     if not backup.exists():
         shutil.copy2(config_path, backup)
@@ -121,8 +124,8 @@ def configure(env_file: Path, profile: Path) -> None:
 def configure_shared_sessions(host: Path) -> None:
     """Share group conversations through the host's native Hermes session routing.
 
-    The multiplexed gateway reads these flags from the host, not each profile.
-    Preserve unrelated settings and back up the original once. No histories,
+    The multiplexed gateway reads routing flags and its cron clock from the host.
+    Set Moscow time, preserve unrelated settings and back up the original. No histories,
     credentials, Telegram admission rules or model selections are modified.
 
     Args:
@@ -144,7 +147,9 @@ def configure_shared_sessions(host: Path) -> None:
     backup = host / "config.before-drawer-shared-sessions.yaml"
     if filename.exists() and not backup.exists():
         shutil.copy2(filename, backup)
-    config.update(group_sessions_per_user=False, thread_sessions_per_user=False)
+    config.update(
+        group_sessions_per_user=False, thread_sessions_per_user=False, timezone=TIMEZONE
+    )
     temporary = filename.with_suffix(".drawer.tmp")
     temporary.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
     temporary.replace(filename)

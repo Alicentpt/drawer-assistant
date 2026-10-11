@@ -41,6 +41,7 @@ def test_order_lifecycle(tmp_path: Path) -> None:
         "action": "create",
         "id": "portrait",
         "title": "Portrait",
+        "timezone": "Europe/Kaliningrad",
         "due": "2026-10-07T12:00:00+02:00",
     }
     first = orders(database, params)
@@ -87,6 +88,7 @@ def test_retry_and_clear(tmp_path: Path) -> None:
             "action": "create",
             "id": "test",
             "title": "Test",
+            "timezone": "Europe/Kaliningrad",
             "due": "2026-10-07T12:00:00+02:00",
         },
     )
@@ -289,6 +291,7 @@ def test_install_preserves_data(tmp_path: Path) -> None:
     ) == [
         "drawer-anima",
         "drawer-images",
+        "drawer-order-review",
         "drawer-orders",
         "drawer-profile",
         "drawer-references",
@@ -309,6 +312,7 @@ def test_install_preserves_data(tmp_path: Path) -> None:
     ]
     assert object_map(configuration["platform_toolsets"])["telegram"] == [
         "drawer",
+        "drawer_read",
         "image_gen",
         "vision",
         "web",
@@ -318,6 +322,12 @@ def test_install_preserves_data(tmp_path: Path) -> None:
         "skills",
     ]
     assert object_map(configuration["terminal"])["cwd"] == str(tmp_path.resolve())
+    assert object_map(configuration["platform_toolsets"])["cron"] == ["drawer_read"]
+    assert object_map(configuration["known_plugin_toolsets"])["cron"] == [
+        "drawer",
+        "drawer_read",
+    ]
+    assert configuration["timezone"] == "Europe/Kaliningrad"
     album_settings = object_map(object_map(configuration["telegram"])["extra"])
     assert album_settings["drawer_complete_albums"] is True
     display = object_map(configuration["display"])

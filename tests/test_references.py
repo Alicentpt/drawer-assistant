@@ -169,7 +169,7 @@ def test_migrate_legacy_links(tmp_path: Path, version: int) -> None:
     assert saved["storage"] == "blob"
     assert saved["notes"] == "Take the palette"
     with transaction(path) as database:
-        current = 4
+        current = 5
         assert database.execute("PRAGMA user_version").fetchone()[0] == current
         assert database.execute("PRAGMA foreign_key_check").fetchall() == []
 

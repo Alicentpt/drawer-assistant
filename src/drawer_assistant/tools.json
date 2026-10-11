@@ -10,7 +10,7 @@
   },
   "drawer_orders": {
     "name": "drawer_orders",
-    "description": "Persistent orders and deadlines. List before updating an order. create requires id/title; update requires id. Dates use ISO 8601 with offset and timezone. A due change replaces the old reminder; reminder defaults to due unless explicitly provided, empty clears. done/cancelled suppress reminders. Stable create ids prevent duplicate retries. Results include delivery attempts/error state. Workflow instructions: skill_view(\"drawer-orders\"). Use remind_at and the installed worker; never create another cron job.",
+    "description": "Persistent orders and deadlines. List before updating an order. create requires id/title; update requires id. Dates use ISO 8601 with offset and timezone. A due change replaces the old reminder; reminder defaults to due unless explicitly provided, empty clears. done/cancelled suppress reminders. Stable create ids prevent duplicate retries. Results include delivery attempts/error state. Workflow instructions: skill_view(\"drawer-orders\"). Use remind_at and the installed worker; never create another cron job. brief stores the client specification; comments is free commentary; priority is 1 low, 2 medium (default), 3 high. Stages belong to drawer_stages, never separate orders. Use drawer_order_info for a ready-to-send order card. Moscow is the default timezone; display dates with AM/PM.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -54,11 +54,28 @@
         },
         "timezone": {
           "type": "string",
-          "description": "IANA zone, default Europe/Kaliningrad"
+          "description": "IANA timezone, default Europe/Moscow (+03:00); display in Moscow AM/PM"
         },
         "remind_at": {
           "type": "string",
           "description": "Reminder ISO timestamp with offset; empty disables"
+        },
+        "brief": {
+          "type": "string",
+          "description": "Full client specification / ТЗ, up to 4000 characters"
+        },
+        "comments": {
+          "type": "string",
+          "description": "Free-form order comments, up to 4000 characters"
+        },
+        "priority": {
+          "type": "string",
+          "description": "Numeric priority as a string: 1 low, 2 medium (default), 3 high",
+          "enum": [
+            "1",
+            "2",
+            "3"
+          ]
         }
       },
       "required": [
@@ -362,6 +379,103 @@
         "action",
         "id"
       ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_stages": {
+    "name": "drawer_stages",
+    "description": "Persistent nested stages INSIDE an order. create requires order_id/id/title; update patches only supplied fields. parent_id nests within the same order; empty is root. list returns the entire tree including done stages and image metadata. attach requires id/reference_id: first save the actual image with drawer_references to this order; links alone are rejected. Completion preserves images/descriptions and records completed_at. Retries reuse ids. Never split stages into separate orders. Workflow: skill_view(\"drawer-orders\").",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "create",
+            "update",
+            "list",
+            "attach"
+          ]
+        },
+        "order_id": {
+          "type": "string",
+          "description": "Existing order id"
+        },
+        "id": {
+          "type": "string",
+          "description": "Stage id unique inside this order, 1..64 letters/digits/_/-"
+        },
+        "title": {
+          "type": "string",
+          "description": "Stage title"
+        },
+        "parent_id": {
+          "type": "string",
+          "description": "Existing parent stage id in this order; empty for root"
+        },
+        "description": {
+          "type": "string",
+          "description": "Work/result description or received client feedback"
+        },
+        "comments": {
+          "type": "string",
+          "description": "Free-form stage comments"
+        },
+        "status": {
+          "type": "string",
+          "description": "Stage lifecycle",
+          "enum": [
+            "pending",
+            "in_progress",
+            "blocked",
+            "done",
+            "cancelled"
+          ]
+        },
+        "due": {
+          "type": "string",
+          "description": "Optional stage deadline ISO 8601 with offset; defaults to no deadline; empty clears"
+        },
+        "position": {
+          "type": "string",
+          "description": "Display sequence 0..999999 as string, default 0"
+        },
+        "reference_id": {
+          "type": "string",
+          "description": "Saved binary reference belonging to this order"
+        }
+      },
+      "required": [
+        "action",
+        "order_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_order_info": {
+    "name": "drawer_order_info",
+    "description": "Read-only complete order information with brief, priority, comments, nested completed/pending stages and image metadata. Returns result.text: the exact ready-to-send Jessica card. Reply with that text without rewriting its template. Does not send Telegram messages itself. To show an attached image use drawer_references get(id). Read the order list if the requested order is ambiguous.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Existing order id"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_order_digest": {
+    "name": "drawer_order_digest",
+    "description": "Read-only snapshot for a daily order review: active deadlines in the next seven days PLUS all overdue open orders; completed upcoming orders; undated open orders; nested stage statuses. Times are Moscow AM/PM. suggested_priority is advice only; no priority is changed. Urgent = overdue or due within two days. Missing stages means progress is unknown. Use drawer-order-review skill to form the final review. No arguments.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
       "additionalProperties": false
     }
   }

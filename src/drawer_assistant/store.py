@@ -9,12 +9,26 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
+from .order_schema import migrate_orders
+from .time_display import TIMEZONE
+
 if TYPE_CHECKING:
     from collections.abc import Generator
     from pathlib import Path
 
 MAX_FIELD = 4000
-ORDER_FIELDS = ("title", "client", "notes", "status", "due", "timezone", "remind_at")
+ORDER_FIELDS = (
+    "title",
+    "client",
+    "notes",
+    "status",
+    "due",
+    "timezone",
+    "remind_at",
+    "brief",
+    "comments",
+    "priority",
+)
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS orders (
  id TEXT PRIMARY KEY, title TEXT NOT NULL, client TEXT NOT NULL,
@@ -94,10 +108,12 @@ def connect(path: Path) -> sqlite3.Connection:
                 database.execute(ASSETS_SCHEMA)
                 database.execute(REFERENCE_FILES_SCHEMA)
                 database.execute("PRAGMA user_version = 4")
+            if version in (0, 1, 2, 3, 4):
+                migrate_orders(database)
     except sqlite3.Error, ValueError:
         database.close()
         raise
-    if version not in (0, 1, 2, 3, 4):
+    if version not in (0, 1, 2, 3, 4, 5):
         database.close()
         message = "Unsupported database version; update Drawer Assistant."
         raise ValueError(message)
@@ -150,7 +166,7 @@ def utc(value: str, timezone: str) -> str:
         moment.tzinfo is None
         or moment.utcoffset() != moment.astimezone(zone).utcoffset()
     ):
-        message = "Use an ISO date with the correct timezone offset, e.g. +02:00."
+        message = "Use an ISO date with the correct timezone offset, e.g. +03:00."
         raise ValueError(message)
     return moment.astimezone(UTC).isoformat(timespec="seconds")
 
@@ -165,7 +181,7 @@ def validate_order(values: dict[str, str]) -> dict[str, str]:
         dict[str, str]: The same validated fields.
 
     Raises:
-        ValueError: Title, status, field length or reminder ordering is invalid.
+        ValueError: Title, status, priority, field length or reminder order is invalid.
         KeyError: A required field or timezone is unknown.
     """  # noqa: DOC503 - Mapping and ZoneInfo failures propagate.
     ZoneInfo(values["timezone"])
@@ -176,6 +192,9 @@ def validate_order(values: dict[str, str]) -> dict[str, str]:
         raise ValueError(message)
     if values["status"] not in {"open", "done", "cancelled"}:
         message = "Status must be open, done or cancelled."
+        raise ValueError(message)
+    if values["priority"] not in {"1", "2", "3"}:
+        message = "Priority must be 1 (low), 2 (medium) or 3 (high)."
         raise ValueError(message)
     if values["due"] and values["remind_at"] > values["due"]:
         message = "Reminder must not be later than the deadline."
@@ -230,7 +249,7 @@ def merge_order(params: dict[str, str], previous: dict[str, str]) -> dict[str, s
         OverflowError: Converting a timestamp exceeds datetime limits.
     """  # noqa: DOC502 - Validation errors propagate.
     values: dict[str, str] = dict.fromkeys(ORDER_FIELDS, "")
-    values.update(status="open", timezone="Europe/Kaliningrad")
+    values.update(status="open", timezone=TIMEZONE, priority="2")
     values.update({key: val for key, val in previous.items() if key in ORDER_FIELDS})
     values.update({key: val for key, val in params.items() if key in ORDER_FIELDS})
     for field in ("due", "remind_at"):
@@ -285,11 +304,13 @@ def orders(path: Path, params: dict[str, str]) -> list[dict[str, str]]:
             previous[field] != values[field] for field in ("due", "remind_at", "status")
         )
         database.execute(
-            "INSERT INTO orders(id,title,client,notes,status,due,timezone,remind_at) "
-            "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+            "INSERT INTO orders(id,title,client,notes,status,due,timezone,remind_at,"
+            "brief,comments,priority) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
             "title=excluded.title, client=excluded.client, notes=excluded.notes, "
             "status=excluded.status, due=excluded.due, timezone=excluded.timezone, "
-            "remind_at=excluded.remind_at",
+            "remind_at=excluded.remind_at,brief=excluded.brief,"
+            "comments=excluded.comments,priority=excluded.priority",
             (identifier, *(values[field] for field in ORDER_FIELDS)),
         )
         if reset:

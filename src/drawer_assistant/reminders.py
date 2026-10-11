@@ -8,12 +8,12 @@ from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
-from zoneinfo import ZoneInfo
 
 from dotenv import dotenv_values
 
 from .network import api, object_map
 from .store import connect, read_orders
+from .time_display import local_time
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -58,17 +58,10 @@ def deliver_due(path: Path, send: Callable[[str], None], now: datetime) -> int:
                 ).fetchone()
                 if row is None:
                     continue
-                local_due = (
-                    datetime.fromisoformat(row["due"])
-                    .astimezone(ZoneInfo(row["timezone"]))
-                    .strftime("%d.%m.%Y %H:%M %Z")
-                    if row["due"]
-                    else "не задан"
-                )
                 # These labels are intentionally Russian, not mixed-script identifiers.
                 text = (
                     f"Джессика на связи. {row['title']}\n"
-                    f"Срок: {local_due}\nЗаказ: {identifier}"  # noqa: RUF001
+                    f"Срок: {local_time(row['due'])}\nЗаказ: {identifier}"  # noqa: RUF001
                 )
                 try:
                     send(text)
