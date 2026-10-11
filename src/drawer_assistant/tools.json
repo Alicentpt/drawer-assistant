@@ -136,7 +136,7 @@
   },
   "drawer_anima": {
     "name": "drawer_anima",
-    "description": "Nova Anime AM v2.0 (Anima) with Qwen3 0.6B Base only. GPU-only text-to-image, 512x512, one image, 25 steps, CFG 5. Code prepends the agreed quality/scenery prefix once and applies the fixed negative; pass only the scene, without Prompt: labels. start with stable id/prompt, then status with the same tool/id. Return MEDIA and generation_seconds. Never resubmit uncertain submitting jobs. No reference images or editing. For multiple panels generate each frame separately, then combine completed local files using drawer_image_sheet. Workflow instructions: skill_view(\"drawer-anima\"). Status waits up to 25 seconds with 5-second polling intervals; maximum three status calls per image per turn, then report pending and stop. Do not bypass loop guardrails with a new job id.",
+    "description": "Single image only. For multiple images, variants or panels (e.g. 4x4) use drawer_anima_batch with one prompt per frame. Nova Anime AM v2.0 (Anima) with Qwen3 0.6B Base only. GPU-only text-to-image, 512x512, one image, 25 steps, CFG 5. Code prepends the agreed quality/scenery prefix once and applies the fixed negative; pass only the scene, without Prompt: labels. start with stable id/prompt, then status with the same tool/id. Return MEDIA and generation_seconds. Never resubmit uncertain submitting jobs. No reference images or editing. Workflow instructions: skill_view(\"drawer-anima\"). Status waits up to 25 seconds with 5-second polling intervals; maximum three status calls per image per turn, then report pending and stop. Do not bypass loop guardrails with a new job id.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -310,6 +310,72 @@
       "type": "object",
       "properties": {},
       "required": [],
+      "additionalProperties": false
+    }
+  },
+  "drawer_anima_batch": {
+    "name": "drawer_anima_batch",
+    "description": "Generate MULTIPLE independent Anima images and automatically assemble the full grid. Use for N variants, panels, contact sheets and 4x4/2x2 requests. start requires stable id and prompts ARRAY with one complete scene per image, not one grid prompt; optional columns/labels/cell_size/gap. status needs only action/id and waits up to 25s with internal pauses. Preserves progress across restarts; repeat start with identical spec does not duplicate jobs. Never resubmit uncertain children. Returns expected_images/completed_images, per-frame generation_seconds and final MEDIA plus assembly_seconds only when ALL frames succeed. If progress increases, continue status; after three unchanged checks report pending and stop. Instructions: skill_view(\"drawer-images\").",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "start",
+            "status"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable batch id, 1..48 letters/digits/_/-"
+        },
+        "prompts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "minItems": 2,
+          "maxItems": 16,
+          "description": "On start: one complete single-frame prompt per image. For 4x4 pass SIXTEEN prompts and columns=4. For 3x1 pass THREE prompts and columns=3. No grid/panel lists inside individual prompts."
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 3,
+          "description": "Grid columns; rows follow image count."
+        },
+        "cell_size": {
+          "type": "integer",
+          "minimum": 128,
+          "maximum": 1024,
+          "default": 512,
+          "description": "Square image bounding box in pixels; fit without cropping. Does not add detail."
+        },
+        "gap": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64,
+          "default": 16,
+          "description": "White spacing per tile side in pixels."
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "maxItems": 16,
+          "description": "Optional one-line caption per image, matching prompts count/order. No percent or at signs."
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
       "additionalProperties": false
     }
   }

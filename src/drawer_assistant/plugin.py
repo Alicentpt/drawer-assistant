@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from . import comfy
+from .anima_batch import batch, multipanel
 from .image_sheet import sheet
 from .network import object_map
 from .order_views import order_digest, order_info
@@ -163,8 +164,8 @@ def handle(
     """Dispatch a native tool call while containing errors at the host boundary.
 
     Args:
-        params (dict[str, object]): Model-supplied JSON arguments; image sheets accept
-            lists/integers, other tools accept string values only.
+        params (dict[str, object]): JSON arguments; sheets/batches accept lists
+            and integers, other tools accept string values only.
         tool (str): Registered tool name selecting the operation.
         settings_file (Path): This installed plugin's profile-local settings file.
         **context (object): Hermes execution metadata; unused by these local tools.
@@ -174,21 +175,45 @@ def handle(
     """
     del context
     try:
-        if tool == "drawer_image_sheet":
+        result: object
+        if tool in {"drawer_image_sheet", "drawer_anima_batch"}:
             settings = object_map(json.loads(settings_file.read_text("utf-8")))
-            return json.dumps(
-                {
-                    "result": sheet(
-                        Path(str(settings["database"])).parent / "image-sheets",
-                        params,
-                        str(settings.get("imagemagick_binary") or ""),
-                    )
-                },
-                ensure_ascii=False,
+            result = (
+                batch(
+                    Path(str(settings["database"])),
+                    str(
+                        settings.get("comfy_anima_url") or settings["comfy_url"]
+                    ).rstrip("/"),
+                    params,
+                    str(settings.get("imagemagick_binary") or ""),
+                )
+                if tool == "drawer_anima_batch"
+                else sheet(
+                    Path(str(settings["database"])).parent / "image-sheets",
+                    params,
+                    str(settings.get("imagemagick_binary") or ""),
+                )
             )
+            return json.dumps({"result": result}, ensure_ascii=False)
+        error: dict[str, str] = {}
         if any(not isinstance(value, str) for value in params.values()):
-            return json.dumps({"error": "All arguments must be strings."})
+            error = {"error": "All arguments must be strings."}
         arguments = {key: str(value) for key, value in params.items()}
+        if (
+            not error
+            and tool == "drawer_anima"
+            and arguments.get("action") == "start"
+            and multipanel(arguments.get("prompt", ""))
+        ):
+            error = {
+                "error": "UseAnimaBatch",
+                "hint": (
+                    "Use drawer_anima_batch with one separate prompt per image "
+                    "and columns for the grid. Do not submit a grid as one prompt."
+                ),
+            }
+        if error:
+            return json.dumps(error)
         if tool == "drawer_persona":
             return json.dumps(
                 {"result": read_persona(settings_file, arguments)}, ensure_ascii=False
@@ -198,7 +223,6 @@ def handle(
         base = str(settings["comfy_url"]).rstrip("/")
         if tool == "drawer_anima":
             base = str(settings.get("comfy_anima_url") or base).rstrip("/")
-        result: object
         if tool in {
             "drawer_orders",
             "drawer_references",

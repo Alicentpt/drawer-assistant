@@ -70,6 +70,13 @@ CREATE TABLE IF NOT EXISTS reference_files (
 )
 """
 
+BATCH_SCHEMA = """
+CREATE TABLE IF NOT EXISTS image_batches (
+ id TEXT PRIMARY KEY, spec TEXT NOT NULL, file TEXT NOT NULL DEFAULT '',
+ assembly_seconds REAL NOT NULL DEFAULT 0
+)
+"""
+
 
 def connect(path: Path) -> sqlite3.Connection:
     """Open a database and migrate orders, generation jobs and binary references.
@@ -110,10 +117,13 @@ def connect(path: Path) -> sqlite3.Connection:
                 database.execute("PRAGMA user_version = 4")
             if version in (0, 1, 2, 3, 4):
                 migrate_orders(database)
+            if version in (0, 1, 2, 3, 4, 5):
+                database.execute(BATCH_SCHEMA)
+                database.execute("PRAGMA user_version = 6")
     except sqlite3.Error, ValueError:
         database.close()
         raise
-    if version not in (0, 1, 2, 3, 4, 5):
+    if version not in (0, 1, 2, 3, 4, 5, 6):
         database.close()
         message = "Unsupported database version; update Drawer Assistant."
         raise ValueError(message)

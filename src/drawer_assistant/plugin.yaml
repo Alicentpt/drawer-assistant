@@ -14,3 +14,4 @@ provides_tools:
   - drawer_order_info
   - drawer_image_sheet
   - drawer_order_digest
+  - drawer_anima_batch
