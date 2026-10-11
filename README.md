@@ -327,29 +327,26 @@ Qwen до добавления ключа не подтверждены.
 | Инструмент | Фиксированная модель | Размер |
 | --- | --- | --- |
 | `drawer_anima` | Nova Anime AM v2.0 + Qwen3 0.6B Base | 512×512 |
-| `drawer_zimage` | Z-Image Turbo W4A8 + abliterated Qwen FP8 | 1024×1024 |
 
-Оба принимают `action`, устойчивый `id` и текстовый `prompt`; start создаёт
+Инструмент принимает `action`, устойчивый `id` и текстовый `prompt`; start создаёт
 задание, status с тем же id возвращает результат и `generation_seconds`.
 Anima автоматически добавляет согласованный positive prefix один раз и фиксированный
 negative из [навыка Hermes](src/drawer_assistant/skills/drawer-anima/SKILL.md). Текст самой сцены
-сохраняется; Z-Image и Flux этот пресет не получают.
+сохраняется. Остальные генераторы отключены.
 PNG сохраняется локально, ответ содержит MEDIA для отправки в Telegram.
 Нельзя автоматически повторять start с новым id после неизвестного исхода POST.
 Референсы/img2img для Nova пока доступны через [UI workflow](comfyui/anima/README.md).
 
-Для отдельного сервера Anima задайте `COMFYUI_ANIMA_BASE_URL` в `.env`:
-например, `https://POD_ID-8188.proxy.runpod.net` для RunPod с портом `8188/http`.
-Пустое значение использует общий `COMFYUI_BASE_URL`. Настройка действует и на
-start, и на status; старые незавершённые задания сначала завершите на старом сервере.
-После изменения выполните `uv run drawer-setup` и перезапустите gateway.
+Anima работает на ПК художницы через Tailscale. Оставьте `COMFYUI_ANIMA_BASE_URL`
+пустым: тогда start и status используют общий `COMFYUI_BASE_URL`.
+Непустое значение перекрывает общий адрес — при смене сервера очистите старое
+значение, иначе Anima продолжит обращаться к нему. После правки выполните
+`uv run drawer-setup`; установленный инструмент читает новый адрес при вызове.
 
 Примеры для тестовой группы:
 
 > @test_drawerin_assistin_bot через Anima нарисуй двух взрослых ведьм,
 > украшающих мастерскую тыквами. Укажи время генерации.
-
-> @test_drawerin_assistin_bot через Z-Image Turbo нарисуй тот же сюжет.
 
 Альтернативный вариант — старый облачный сервер через SSH. На нём
 ComfyUI установлен в `/home/ubuntu/ComfyUI`.
