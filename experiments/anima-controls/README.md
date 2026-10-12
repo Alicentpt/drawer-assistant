@@ -6,7 +6,8 @@
 не входят в allowlist генератора и не подменяют действующий workflow.
 
 Все пять используют закреплённый файл Nova Anime AM, Qwen3 0.6B Base и Qwen Image VAE.
-Размер 512×640, один кадр на GPU job. Quality prefix и negative сохранены.
+Standalone: 512×640; новый All In One: 512×512 для бюджета памяти всех четырёх
+веток. Один кадр на GPU job. Quality prefix и negative сохранены.
 Вес diffusion хранится в FP8 e4m3fn; вычисления и все модели остаются на GPU.
 FP8 выбран после замеров: обычные веса с LoRA превышали 9 ГиБ на 3090.
 Предел для конкретной RTX 3080 и качество переноса требуют дальнейшей проверки.
@@ -17,22 +18,26 @@ FP8 выбран после замеров: обычные веса с LoRA пр
 | `character.api.json` | персонаж | Anima InContext, `anima-incontext-character.safetensors` |
 | `depth.api.json` | фото/рисунок композиции | DepthAnythingV2 small, Advanced ControlNet с поддержкой Anima VACE, `anima-vace-depth.safetensors` |
 | `pose.api.json` | фото/рисунок позы | AnimaPoseControl, AnimaControlApply, `anima_pose_preview2.safetensors`, два ONNX детектора |
-| `all-in-one.api.json` | стиль + персонаж + поза | три независимых `LazySwitchKJ`, остальные зависимости как выше |
+| `all-in-one.api.json` | стиль + персонаж + поза + глубина | четыре независимых переключателя, зависимости всех четырёх веток |
 
 ## Открыть в UI
 
 Файлы `*.ui.json` — для редактора, `*.api.json` — для HTTP `/prompt`.
 На тестовом сервере они сохранены в `user/default/workflows/Anima-Controls`:
-слева **Рабочие процессы → Anima-Controls → all-in-one.ui**.
+слева **Рабочие процессы → Anima-Controls → all-in-one-v2-pose-depth.ui**.
+Старый `all-in-one.ui` сохранён отдельно; v2 открывается новой вкладкой.
 Для другого компьютера перетащить UI JSON в ComfyUI, установить закреплённые
-ноды/веса и загрузить свои изображения в три LoadImage. Наши тестовые файлы
+ноды/веса и загрузить свои изображения в четыре LoadImage. Наши тестовые файлы
 на сервере называются `jessica-style.png`, `jessica-character.png`,
 `jessica-composition.png`; в Git самих изображений нет.
 
-Переключатели **Enable STYLE / CHARACTER / POSE**:
+Переключатели **STYLE / CHARACTER / POSE / DEPTH — ON / OFF**:
 `true` включает ветку, `false` обходит её целиком вместе с LoRA.
 Все `false` дают обычный text-to-image. Силу менять в Apply нодах.
-Для API изменить boolean `switch` у узлов 150 / 250 / 350.
+Depth по умолчанию выключен; поза и глубина могут работать вместе или отдельно.
+Depth принимает собственную картинку, она не обязана совпадать с референсом позы.
+Для API изменить boolean `switch` у узлов 150 / 250 / 350 и `value` у узла 440.
+У Depth один boolean одновременно переключает positive и negative conditioning.
 Ноды и веса нужны даже для выключенных веток: валидация ComfyUI проверяет полный
 граф. LoadImage должны указывать на существующие файлы. Lazy switch исключает
 выполнение ветки, но не отменяет валидацию. При сборке API-графа без референсов
@@ -93,7 +98,8 @@ ComfyUI должен работать с `--gpu-only`. Одного флага �
   compute dtype для FP8. Остаточные IP-модули остаются в VRAM, но без IP-токенов
   не участвуют в расчёте. Переключение проверено сравнением пикселей.
 - `depth-dtype.patch` приводит вход base patch embedding к compute dtype;
-  исходник падал на несовпадении fp32/bf16, затем FP8/bf16.
+  исходник падал на несовпадении fp32/bf16, затем FP8/bf16. Также ограничивает
+  depth hints генерируемым кадром, не меняя чистые reference frames InContext.
 
 До применения сверить SHA-256 исходного файла из `revisions.json`, затем проверить
 патч через `git apply --check` из каталога соответствующей ноды. Не применять
@@ -102,6 +108,9 @@ ComfyUI должен работать с `--gpu-only`. Одного флага �
 всех сторонних нод: --gpu-only, CUDA ONNX и отсутствие CPU model offload проверены,
 но служебные shape-операции ONNX могут идти на CPU. При OOM уменьшаем размер/
 меняем адаптер, без CPU fallback.
+
+Настройка вручную описана в [TUNING.md](TUNING.md). Диапазоны — стартовые
+экспериментальные ориентиры, не обещание точного результата.
 
 ## Референсы и проверка
 

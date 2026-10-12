@@ -44,7 +44,7 @@
     "class_type": "EmptyLatentImage",
     "inputs": {
       "width": 512,
-      "height": 640,
+      "height": 512,
       "batch_size": 1
     }
   },
@@ -56,11 +56,11 @@
         0
       ],
       "positive": [
-        "4",
+        "450",
         0
       ],
       "negative": [
-        "5",
+        "451",
         0
       ],
       "latent_image": [
@@ -185,7 +185,7 @@
         0
       ],
       "target_width": 512,
-      "target_height": 640
+      "target_height": 512
     }
   },
   "213": {
@@ -255,7 +255,7 @@
       ],
       "upscale_method": "nearest-exact",
       "width": 512,
-      "height": 640,
+      "height": 512,
       "crop": "disabled"
     }
   },
@@ -323,6 +323,106 @@
         0
       ],
       "shift": 3.0
+    }
+  },
+  "410": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "jessica-composition.png"
+    }
+  },
+  "411": {
+    "class_type": "DepthAnythingV2Preprocessor",
+    "inputs": {
+      "image": [
+        "410",
+        0
+      ],
+      "ckpt_name": "depth_anything_v2_vits.pth",
+      "resolution": 512
+    }
+  },
+  "412": {
+    "class_type": "ACN_ControlNetLoaderAdvanced",
+    "inputs": {
+      "cnet": "anima-vace-depth.safetensors"
+    }
+  },
+  "413": {
+    "class_type": "ACN_AdvancedControlNetApply_v2",
+    "inputs": {
+      "positive": [
+        "4",
+        0
+      ],
+      "negative": [
+        "5",
+        0
+      ],
+      "control_net": [
+        "412",
+        0
+      ],
+      "image": [
+        "411",
+        0
+      ],
+      "strength": 0.8,
+      "start_percent": 0.0,
+      "end_percent": 1.0,
+      "vae_optional": [
+        "3",
+        0
+      ]
+    }
+  },
+  "440": {
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "Enable DEPTH (false = completely off)"
+    },
+    "inputs": {
+      "value": false
+    }
+  },
+  "450": {
+    "class_type": "LazySwitchKJ",
+    "_meta": {
+      "title": "Depth positive (shared Enable DEPTH)"
+    },
+    "inputs": {
+      "switch": [
+        "440",
+        0
+      ],
+      "on_false": [
+        "4",
+        0
+      ],
+      "on_true": [
+        "413",
+        0
+      ]
+    }
+  },
+  "451": {
+    "class_type": "LazySwitchKJ",
+    "_meta": {
+      "title": "Depth negative (shared Enable DEPTH)"
+    },
+    "inputs": {
+      "switch": [
+        "440",
+        0
+      ],
+      "on_false": [
+        "5",
+        0
+      ],
+      "on_true": [
+        "413",
+        1
+      ]
     }
   }
 }

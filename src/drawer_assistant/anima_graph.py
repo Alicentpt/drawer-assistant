@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Drawer Assistant contributors.
 # SPDX-License-Identifier: GPL-3.0-only
-"""Build an experimental Anima graph with three independent lazy switches."""
+"""Build an experimental Anima graph with four independent control switches."""
 
 import json
 from pathlib import Path
@@ -38,15 +38,60 @@ def rewire(value: object, ids: dict[str, str], model: list[str | int]) -> object
     return value
 
 
-def build(folder: Path) -> dict[str, object]:
-    """Combine style, character and pose without loading disabled branches.
+def add_depth(graph: dict[str, object], folder: Path) -> None:
+    """Attach optional depth conditioning without modifying the model chain.
 
     Args:
-        folder (Path): Directory containing the three pinned standalone API graphs.
+        graph (dict[str, object]): Combined graph mutated in place.
+        folder (Path): Directory containing the pinned depth API graph.
+
+    Returns:
+        None: Positive and negative conditioning share one Depth boolean, off
+            by default. Disabled depth bypasses its loader and preprocessor.
+
+    Raises:
+        OSError: The source workflow cannot be read.
+        UnicodeError: The workflow is not UTF-8.
+        ValueError: The source JSON document is invalid.
+        KeyError: A fixed graph node or conditioning link is missing.
+        TypeError: The source graph has an incompatible JSON structure.
+    """  # noqa: DOC502 - Fixed graph file and JSON decoding errors propagate.
+    # Templates are repository-owned; validation also runs on ComfyUI.
+    source = cast(
+        "dict[str, object]", json.loads((folder / "depth.api.json").read_text("utf-8"))
+    )
+    ids = {str(key): str(400 + key) for key in range(10, 14)}
+    graph.update({ids[key]: rewire(source[key], ids, ["1", 0]) for key in ids})
+    graph["440"] = {
+        "class_type": "PrimitiveBoolean",
+        "_meta": {"title": "Enable DEPTH (false = completely off)"},
+        "inputs": {"value": False},
+    }
+    sampler = cast("dict[str, object]", graph["7"])
+    for slot, field in enumerate(("positive", "negative")):
+        switch = str(450 + slot)
+        graph[switch] = {
+            "class_type": "LazySwitchKJ",
+            "_meta": {"title": f"Depth {field} (shared Enable DEPTH)"},
+            "inputs": {
+                "switch": ["440", 0],
+                "on_false": [str(4 + slot), 0],
+                "on_true": ["413", slot],
+            },
+        }
+        cast("dict[str, object]", sampler["inputs"])[field] = [switch, 0]
+
+
+def build(folder: Path) -> dict[str, object]:
+    """Combine style, character, pose and depth without executing disabled branches.
+
+    Args:
+        folder (Path): Directory containing the four pinned standalone API graphs.
 
     Returns:
         dict[str, object]: Graph with Style/Character/Pose booleans on lazy switches
-            150/250/350. False bypasses the entire adapter, including its LoRA.
+            150/250/350 and Depth boolean on 440. False bypasses the entire branch.
+            All three spatial inputs start at 512 square for the VRAM budget.
 
     Raises:
         OSError: A source workflow cannot be read.
@@ -99,6 +144,10 @@ def build(folder: Path) -> dict[str, object]:
     cast("dict[str, object]", output["inputs"])["filename_prefix"] = (
         "Jessica/All_In_One"
     )
+    add_depth(graph, folder)
+    for key, field in (("6", "height"), ("212", "target_height"), ("312", "height")):
+        node = cast("dict[str, object]", graph[key])
+        cast("dict[str, object]", node["inputs"])[field] = 512
     return graph
 
 
