@@ -1,0 +1,40 @@
+--- a/__init__.py
++++ b/__init__.py
+@@ -23,6 +23,7 @@
+         from .control_embedder import ControlEmbedder
+         dit = model.model.diffusion_model
+         p = next(dit.parameters())
++        compute_dtype = model.model.manual_cast_dtype or p.dtype
+         embedder = ControlEmbedder(in_channels=16, model_channels=getattr(dit, "model_channels", 2048))
+         # Training saves the embedder INSIDE the adapter file as `diffusion_model.control_embedder.proj.*`
+         # (saver keeps `control_embedder.proj.*`, base save_adapter prepends `diffusion_model.`). Strip up
+@@ -43,7 +44,7 @@
+               for k, v in st.load_file(cep).items() if "control_embedder." in k}
+         assert sd, f"no control_embedder.* keys in {cep} (expected diffusion_model.control_embedder.proj.*)"
+         embedder.load_state_dict(sd, strict=False)
+-        embedder.eval().to(p.device, p.dtype)
++        embedder.eval().to(p.device, compute_dtype)
+         ctrl = control_latent["samples"]
+ 
+         def wrapper(executor, *args, **kwargs):
+@@ -51,12 +52,18 @@
+             # ControlEmbedder output to the x_embedder output via a temporary forward hook,
+             # removed after the call so it never leaks onto the shared DiT. strength=0 zeroes
+             # control_tokens -> output unchanged (the base regression).
+-            control_tokens = strength * embedder(ctrl.to(p.device, p.dtype))
++            control_tokens = strength * embedder(ctrl.to(p.device, compute_dtype))
+ 
+             def add_control(_module, _inputs, output):
+                 # match output's device AND dtype — at apply() the DiT may still be on CPU (ComfyUI
+                 # lazy-loads), so control_tokens can be built on CPU while output is on cuda at sampling.
+-                return output + control_tokens.to(output.device, output.dtype)
++                tokens = control_tokens.to(output.device, output.dtype)
++                # InContext appends clean reference frames; control only frame 0.
++                # Broadcasting the pose into those frames corrupts the identity.
++                if output.shape[1] != tokens.shape[1]:
++                    import torch
++                    return torch.cat((output[:, :1] + tokens, output[:, 1:]), dim=1)
++                return output + tokens
+ 
+             handle = dit.x_embedder.register_forward_hook(add_control)
+             try:

@@ -1,0 +1,13 @@
+--- a/adv_control/control_anima_vace.py
++++ b/adv_control/control_anima_vace.py
+@@ -512,7 +512,9 @@
+                 self.cond_hint.to(device=x_noisy.device, dtype=dtype), patch_size
+             )
+ 
+-            x_B_T_H_W_D, rope_emb, extra_pos_emb = dit.prepare_embedded_sequence(x_5d)
++            x_B_T_H_W_D, rope_emb, extra_pos_emb = dit.prepare_embedded_sequence(
++                x_5d.to(dtype=dtype)
++            )
+ 
+             timestep = self.model_sampling_current.timestep(t)
+             if timestep.ndim == 1:

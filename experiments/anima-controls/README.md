@@ -1,12 +1,15 @@
-# Четыре экспериментальных workflow Anima
+# Пять экспериментальных workflow Anima
 
-Статус: API-графы собраны по исходникам нод, но на RTX 3080 ещё не испытаны.
+Статус: 12.10.2026 испытаны на RTX 3090, включая запуск All In One из UI.
+На RTX 3080 ещё не испытаны. Замеры — в [TEST-REPORT.md](TEST-REPORT.md).
 Рабочие инструменты Hermes пока используют прежний text-to-image. Эти файлы
 не входят в allowlist генератора и не подменяют действующий workflow.
 
-Все четыре используют нашу Nova Anime AM v2.0, Qwen3 0.6B Base и Qwen Image VAE.
-Размер 512×512, один кадр на GPU job. Quality prefix и negative сохранены.
-Совместимость адаптеров с Nova, качество и предел 9 ГБ VRAM требуют живого теста.
+Все пять используют закреплённый файл Nova Anime AM, Qwen3 0.6B Base и Qwen Image VAE.
+Размер 512×640, один кадр на GPU job. Quality prefix и negative сохранены.
+Вес diffusion хранится в FP8 e4m3fn; вычисления и все модели остаются на GPU.
+FP8 выбран после замеров: обычные веса с LoRA превышали 9 ГиБ на 3090.
+Предел для конкретной RTX 3080 и качество переноса требуют дальнейшей проверки.
 
 | API-граф | Вход | Дополнительные ноды и веса |
 |---|---|---|
@@ -14,6 +17,31 @@
 | `character.api.json` | персонаж | Anima InContext, `anima-incontext-character.safetensors` |
 | `depth.api.json` | фото/рисунок композиции | DepthAnythingV2 small, Advanced ControlNet с поддержкой Anima VACE, `anima-vace-depth.safetensors` |
 | `pose.api.json` | фото/рисунок позы | AnimaPoseControl, AnimaControlApply, `anima_pose_preview2.safetensors`, два ONNX детектора |
+| `all-in-one.api.json` | стиль + персонаж + поза | три независимых `LazySwitchKJ`, остальные зависимости как выше |
+
+## Открыть в UI
+
+Файлы `*.ui.json` — для редактора, `*.api.json` — для HTTP `/prompt`.
+На тестовом сервере они сохранены в `user/default/workflows/Anima-Controls`:
+слева **Рабочие процессы → Anima-Controls → all-in-one.ui**.
+Для другого компьютера перетащить UI JSON в ComfyUI, установить закреплённые
+ноды/веса и загрузить свои изображения в три LoadImage. Наши тестовые файлы
+на сервере называются `jessica-style.png`, `jessica-character.png`,
+`jessica-composition.png`; в Git самих изображений нет.
+
+Переключатели **Enable STYLE / CHARACTER / POSE**:
+`true` включает ветку, `false` обходит её целиком вместе с LoRA.
+Все `false` дают обычный text-to-image. Силу менять в Apply нодах.
+Для API изменить boolean `switch` у узлов 150 / 250 / 350.
+Ноды и веса нужны даже для выключенных веток: валидация ComfyUI проверяет полный
+граф. LoadImage должны указывать на существующие файлы. Lazy switch исключает
+выполнение ветки, но не отменяет валидацию. При сборке API-графа без референсов
+следует удалять выключенные ветки.
+
+Пересобрать All In One из отдельных API-графов:
+`uv run python -m drawer_assistant.anima_graph`.
+AuraFlow shift стоит один раз после всей цепочки моделей; размер latent,
+AnimaRefEncode и ImageScale позы согласован. Не менять один из них отдельно.
 
 Перенос стиля через выбранный IP-Adapter — гипотеза для проверки. Доступный файл
 весов называется Character Reference; README нод заявляет style transfer,
@@ -40,10 +68,14 @@ Depth контролирует глубину сцены, Pose — скелет;
 - [Pose Preview-2](https://huggingface.co/Claquasse/Anima-Control-Pose): оба каталога
   из `comfyui/` в `custom_nodes`, safetensors в `models/loras`; детекторы из
   `detector/` в кеш rtmlib согласно README автора.
+- [KJNodes](https://github.com/kijai/ComfyUI-KJNodes): закреплённая ревизия
+  в `custom_nodes`, даёт `LazySwitchKJ` для All In One.
 
 Зависимости каждой ноды устанавливаются Python-интерпретатором именно ComfyUI.
 Веса не загружаются на ноутбук агента. Перезапуск ComfyUI — после установки
 зависимостей и GPU-only правок; затем проверить `/object_info` и `/system_stats`.
+После установки rtmlib удалить CPU-пакет `onnxruntime` и установить совместимый
+`onnxruntime-gpu`: два пакета с одним импортом могут перекрывать друг друга.
 
 ## GPU-only
 
@@ -54,12 +86,22 @@ ComfyUI должен работать с `--gpu-only`. Одного флага �
 - Pose изначально создаёт ONNX детектор на CPU. `pose-gpu-only.patch` меняет
   закреплённый `ComfyUI-anima-pose-control/detect.py` на CUDA и запрещает запуск
   без `CUDAExecutionProvider`. Нужен совместимый `onnxruntime-gpu`, а не CPU пакет.
+- `pose-apply-gpu.patch` использует compute dtype вместо FP8 storage dtype и
+  применяет скелет только к генерируемому кадру, сохраняя InContext reference.
+- `style-gpu-only.patch` также переводит LoRA на ModelPatcher: исходные постоянные
+  обёртки меняли общие слои и загрязняли последующие задания. Добавлена поддержка
+  compute dtype для FP8. Остаточные IP-модули остаются в VRAM, но без IP-токенов
+  не участвуют в расчёте. Переключение проверено сравнением пикселей.
+- `depth-dtype.patch` приводит вход base patch embedding к compute dtype;
+  исходник падал на несовпадении fp32/bf16, затем FP8/bf16.
 
 До применения сверить SHA-256 исходного файла из `revisions.json`, затем проверить
 патч через `git apply --check` из каталога соответствующей ноды. Не применять
-к другой версии вслепую. Эти патчи подготовлены локально, на сервере не применены.
-Они ещё не доказывают отсутствие других выгрузок: на испытании проверяем устройства
-моделей и пиковую VRAM. При OOM уменьшаем размер/меняем адаптер, без CPU fallback.
+к другой версии вслепую.
+Патчи применены на тестовом поде и проверены живыми прогонами. Это ещё не аудит
+всех сторонних нод: --gpu-only, CUDA ONNX и отсутствие CPU model offload проверены,
+но служебные shape-операции ONNX могут идти на CPU. При OOM уменьшаем размер/
+меняем адаптер, без CPU fallback.
 
 ## Референсы и проверка
 
@@ -72,7 +114,7 @@ ComfyUI должен работать с `--gpu-only`. Одного флага �
 3. `composition.png`: нужная поза и ракурс, тело не обрезано и не перекрыто.
    Один файл подходит для тестов Pose и Depth; для Depth полезен читаемый фон.
 
-Через ComfyUI загрузить их как `jessica-tests/<имя>.png`; в API-графах это пути
+Через ComfyUI загрузить их как `jessica-<имя>.png`; в API-графах это пути
 входов на сервере, а не локальные Windows-пути агента. Можно заменить значения
 `LoadImage.image` на имена, фактически возвращённые загрузкой.
 

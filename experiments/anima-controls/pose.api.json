@@ -1,17 +1,189 @@
 {
-  "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "novaAnimeAM_v20.safetensors", "weight_dtype": "default"}},
-  "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen_3_06b_base.safetensors", "type": "stable_diffusion", "device": "default"}},
-  "3": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_vae.safetensors"}},
-  "4": {"class_type": "CLIPTextEncode", "inputs": {"text": "masterpiece, best quality, score_9, score_8, score_7, year 2025, newest, highres, absurdres, very aesthetic, scenery, 1girl, solo, adult woman, short silver hair, green eyes, red jacket, standing in a moonlit garden, full body, three-quarter view.", "clip": ["2", 0]}},
-  "5": {"class_type": "CLIPTextEncode", "inputs": {"text": "worst quality, low quality, early, old, score_1, score_2, score_3, cartoon, graphic, painting, crayon, graphite, abstract, glitch, deformed, mutated, ugly, disfigured, long body, bad anatomy, bad hands, missing fingers, extra fingers, extra digits, fewer digits, cropped, very displeasing, artist name, blurry, jpeg artifacts, lowres, censor", "clip": ["2", 0]}},
-  "6": {"class_type": "EmptyLatentImage", "inputs": {"width": 512, "height": 512, "batch_size": 1}},
-  "7": {"class_type": "KSampler", "inputs": {"model": ["15", 0], "positive": ["4", 0], "negative": ["5", 0], "latent_image": ["6", 0], "seed": 20261012, "steps": 30, "cfg": 4.0, "sampler_name": "er_sde", "scheduler": "simple", "denoise": 1.0}},
-  "8": {"class_type": "VAEDecodeTiled", "inputs": {"samples": ["7", 0], "vae": ["3", 0], "tile_size": 512, "overlap": 64, "temporal_size": 64, "temporal_overlap": 8}},
-  "9": {"class_type": "SaveImage", "inputs": {"images": ["8", 0], "filename_prefix": "Jessica/Test_Pose"}},
-  "10": {"class_type": "LoadImage", "inputs": {"image": "jessica-tests/composition.png"}},
-  "11": {"class_type": "AnimaPoseControl", "inputs": {"image": ["10", 0], "style": "R0_thin", "hands": true, "face": true, "feet": true, "redetect": true, "resolution": 512, "pose_json": ""}},
-  "12": {"class_type": "ImageScale", "inputs": {"image": ["11", 0], "upscale_method": "nearest-exact", "width": 512, "height": 512, "crop": "disabled"}},
-  "13": {"class_type": "VAEEncode", "inputs": {"pixels": ["12", 0], "vae": ["3", 0]}},
-  "14": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": "anima_pose_preview2.safetensors", "strength_model": 1.0}},
-  "15": {"class_type": "AnimaControlApply", "inputs": {"model": ["14", 0], "control_latent": ["13", 0], "control_embedder_path": "anima_pose_preview2.safetensors", "strength": 1.0}}
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "novaAnimeAM_v20.safetensors",
+      "weight_dtype": "fp8_e4m3fn"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_06b_base.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "masterpiece, best quality, score_9, score_8, score_7, year 2025, newest, highres, absurdres, very aesthetic, scenery, 1girl, solo, adult woman, pale skin, long wavy white hair, turquoise eyes, navy blue fitted t-shirt over black long sleeves, blue trousers, brown belt, upper body, standing, leaning backward, laughing with mouth open, head tilted upward, one bent arm crossing her abdomen, other arm extended down to the left, dark gothic room, warm golden candlelight, deep indigo shadows, visible brush strokes. An adult silver-haired woman laughs in a dim candlelit room, her chin raised, one hand resting across her waist and the opposite arm reaching outward.",
+      "clip": [
+        "2",
+        0
+      ]
+    }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "worst quality, low quality, early, old, score_1, score_2, score_3, cartoon, graphic, painting, crayon, graphite, abstract, glitch, deformed, mutated, ugly, disfigured, long body, bad anatomy, bad hands, missing fingers, extra fingers, extra digits, fewer digits, cropped, very displeasing, artist name, blurry, jpeg artifacts, lowres, censor",
+      "clip": [
+        "2",
+        0
+      ]
+    }
+  },
+  "6": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 512,
+      "height": 640,
+      "batch_size": 1
+    }
+  },
+  "7": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "99",
+        0
+      ],
+      "positive": [
+        "4",
+        0
+      ],
+      "negative": [
+        "5",
+        0
+      ],
+      "latent_image": [
+        "6",
+        0
+      ],
+      "seed": 20261012,
+      "steps": 30,
+      "cfg": 4.0,
+      "sampler_name": "er_sde",
+      "scheduler": "simple",
+      "denoise": 1.0
+    }
+  },
+  "8": {
+    "class_type": "VAEDecodeTiled",
+    "inputs": {
+      "samples": [
+        "7",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "tile_size": 512,
+      "overlap": 64,
+      "temporal_size": 64,
+      "temporal_overlap": 8
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "8",
+        0
+      ],
+      "filename_prefix": "Jessica/Test_Pose"
+    }
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "jessica-composition.png"
+    }
+  },
+  "11": {
+    "class_type": "AnimaPoseControl",
+    "inputs": {
+      "image": [
+        "10",
+        0
+      ],
+      "style": "R0_thin",
+      "hands": true,
+      "face": true,
+      "feet": true,
+      "redetect": true,
+      "resolution": 512,
+      "pose_json": ""
+    }
+  },
+  "12": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": [
+        "11",
+        0
+      ],
+      "upscale_method": "nearest-exact",
+      "width": 512,
+      "height": 640,
+      "crop": "disabled"
+    }
+  },
+  "13": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "12",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "14": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "lora_name": "anima_pose_preview2.safetensors",
+      "strength_model": 1.0
+    }
+  },
+  "15": {
+    "class_type": "AnimaControlApply",
+    "inputs": {
+      "model": [
+        "14",
+        0
+      ],
+      "control_latent": [
+        "13",
+        0
+      ],
+      "control_embedder_path": "anima_pose_preview2.safetensors",
+      "strength": 1.0
+    }
+  },
+  "99": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": {
+      "model": [
+        "15",
+        0
+      ],
+      "shift": 3.0
+    }
+  }
 }
