@@ -2,6 +2,8 @@
 
 Статус: 12.10.2026 испытаны на RTX 3090, включая запуск All In One из UI.
 На RTX 3080 ещё не испытаны. Замеры — в [TEST-REPORT.md](TEST-REPORT.md).
+Разбор стиля, независимого CFG и Character по 56 новым прогонам —
+[DEEP-TEST-REPORT.md](DEEP-TEST-REPORT.md).
 Рабочие инструменты Hermes пока используют прежний text-to-image. Эти файлы
 не входят в allowlist генератора и не подменяют действующий workflow.
 
