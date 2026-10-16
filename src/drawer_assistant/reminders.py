@@ -7,11 +7,11 @@ import re
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from html import escape
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from dotenv import dotenv_values
 
+from .database import configured_database
 from .messages import PRIORITIES
 from .network import api, object_map
 from .store import connect, read_orders
@@ -19,6 +19,9 @@ from .time_display import local_time
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from pathlib import Path
+
+    from .database import Location
 
 
 def reminder_text(title: str, deadline: str, priority: str, identifier: str) -> str:
@@ -49,7 +52,7 @@ def reminder_text(title: str, deadline: str, priority: str, identifier: str) -> 
     )
 
 
-def deliver_due(path: Path, send: Callable[[str], None], now: datetime) -> int:
+def deliver_due(path: Location, send: Callable[[str], None], now: datetime) -> int:
     """Send due reminders under a transaction to serialize edits and other workers.
 
     Commit each delivery separately. Retry failures with exponential backoff capped
@@ -57,7 +60,7 @@ def deliver_due(path: Path, send: Callable[[str], None], now: datetime) -> int:
     Telegram does not offer an idempotency key for sendMessage.
 
     Args:
-        path (Path): Orders database filename.
+        path (Location): Orders database filename.
         send (Callable[[str], None]): Bounded HTML sender; raises RuntimeError
             on delivery failure.
         now (datetime): Current aware timestamp used for due checks and retry times.
@@ -68,6 +71,7 @@ def deliver_due(path: Path, send: Callable[[str], None], now: datetime) -> int:
     Raises:
         ValueError: Now/deadline is invalid or the database schema is unsupported.
         OSError: The data directory cannot be created.
+        RuntimeError: PostgreSQL operations fail.
         sqlite3.Error: Reading or committing the database fails.
         KeyError: Stored timezone or required order field is invalid.
         OverflowError: The retry timestamp exceeds datetime limits.
@@ -128,6 +132,7 @@ def tick(profile: Path) -> int:
         KeyError: A required configuration value or stored timezone is missing.
         OSError: Configuration or database files cannot be accessed.
         UnicodeError: Configuration text is not valid UTF-8.
+        RuntimeError: PostgreSQL operations fail.
         sqlite3.Error: Database operations fail.
         OverflowError: The retry timestamp exceeds datetime limits.
     """  # noqa: DOC503 - Includes delegated storage and parsing errors.
@@ -165,4 +170,8 @@ def tick(profile: Path) -> int:
             message = "Invalid Telegram response."
             raise RuntimeError(message) from exc
 
-    return deliver_due(Path(str(settings["database"])), send, datetime.now(UTC))
+    return deliver_due(
+        configured_database(profile / "plugins/drawer/settings.json", settings),
+        send,
+        datetime.now(UTC),
+    )

@@ -1,0 +1,25 @@
+name: drawer-assistant
+services:
+  hermes:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    image: drawer-hermes:postgres
+    restart: unless-stopped
+    # Matches upstream Linux deployment and uses host Tailscale routes/DNS.
+    network_mode: host
+    volumes:
+      - ./state/hermes:/opt/data
+    environment:
+      HERMES_UID: "${HERMES_UID:-1000}"
+      HERMES_GID: "${HERMES_GID:-1000}"
+      HERMES_DASHBOARD: "0"
+      TZ: Europe/Moscow
+    command: ["--profile", "default", "gateway", "run"]
+    stop_grace_period: 60s
+    mem_limit: "${HERMES_MEMORY_LIMIT:-768m}"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

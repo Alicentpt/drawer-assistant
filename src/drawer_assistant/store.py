@@ -6,15 +6,26 @@ import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, overload
 from zoneinfo import ZoneInfo
 
+from .database import Database
 from .order_schema import migrate_orders
+from .schema import (
+    ALIBABA_SCHEMA,
+    ASSETS_SCHEMA,
+    BATCH_SCHEMA,
+    REFERENCE_FILES_SCHEMA,
+    SCHEMA,
+)
 from .time_display import TIMEZONE
 
 if TYPE_CHECKING:
     from collections.abc import Generator
     from pathlib import Path
+
+    from .database import Connection, Location, Row
+    from .postgres import Postgres
 
 MAX_FIELD = 4000
 ORDER_FIELDS = (
@@ -29,56 +40,9 @@ ORDER_FIELDS = (
     "comments",
     "priority",
 )
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS orders (
- id TEXT PRIMARY KEY, title TEXT NOT NULL, client TEXT NOT NULL,
- notes TEXT NOT NULL, status TEXT NOT NULL, due TEXT NOT NULL,
- timezone TEXT NOT NULL, remind_at TEXT NOT NULL,
- sent_at TEXT NOT NULL DEFAULT '', attempts INTEGER NOT NULL DEFAULT 0,
- next_attempt TEXT NOT NULL DEFAULT '', last_error TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS refs (
- id TEXT PRIMARY KEY, title TEXT NOT NULL, url TEXT NOT NULL,
- order_id TEXT NOT NULL, notes TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS jobs (
- id TEXT PRIMARY KEY, prompt TEXT NOT NULL, workflow TEXT NOT NULL,
- prompt_id TEXT NOT NULL DEFAULT '', state TEXT NOT NULL DEFAULT 'submitting',
- file TEXT NOT NULL DEFAULT '', generation_seconds TEXT NOT NULL DEFAULT ''
-);
-PRAGMA user_version = 2;
-"""
-
-ALIBABA_SCHEMA = """
-CREATE TABLE IF NOT EXISTS alibaba_jobs (
- id TEXT PRIMARY KEY, model TEXT NOT NULL, base TEXT NOT NULL,
- fingerprint TEXT NOT NULL, request TEXT NOT NULL, task_id TEXT NOT NULL DEFAULT '',
- state TEXT NOT NULL DEFAULT 'submitting', file TEXT NOT NULL DEFAULT '',
- generation_seconds TEXT NOT NULL DEFAULT '', error_code TEXT NOT NULL DEFAULT ''
-)
-"""
-
-ASSETS_SCHEMA = """
-CREATE TABLE IF NOT EXISTS assets (
- sha256 TEXT PRIMARY KEY, mime TEXT NOT NULL, data BLOB NOT NULL
-)
-"""
-REFERENCE_FILES_SCHEMA = """
-CREATE TABLE IF NOT EXISTS reference_files (
- reference_id TEXT PRIMARY KEY REFERENCES refs(id),
- sha256 TEXT NOT NULL REFERENCES assets(sha256), filename TEXT NOT NULL
-)
-"""
-
-BATCH_SCHEMA = """
-CREATE TABLE IF NOT EXISTS image_batches (
- id TEXT PRIMARY KEY, spec TEXT NOT NULL, file TEXT NOT NULL DEFAULT '',
- assembly_seconds REAL NOT NULL DEFAULT 0
-)
-"""
 
 
-def connect(path: Path) -> sqlite3.Connection:
+def connect_sqlite(path: Path) -> sqlite3.Connection:
     """Open a database and migrate orders, generation jobs and binary references.
 
     Args:
@@ -130,19 +94,113 @@ def connect(path: Path) -> sqlite3.Connection:
     return database
 
 
+@overload
+def connect(path: Path) -> sqlite3.Connection:  # noqa: D418 - Repo documents every function.
+    """Open a local SQLite database using the shared connection entry point.
+
+    Args:
+        path (Path): Local database filename outside the source checkout.
+
+    Returns:
+        sqlite3.Connection: Initialized connection; caller closes it.
+
+    Raises:
+        OSError: The parent directory cannot be created.
+        sqlite3.Error: Opening or migrating SQLite fails.
+        ValueError: The database schema is unsupported.
+    """  # noqa: DOC502 - Overload documents the runtime implementation.
+
+
+@overload
+def connect(path: Database) -> Postgres:  # noqa: D418 - Repo documents every function.
+    """Open a remote PostgreSQL database using the shared connection entry point.
+
+    Args:
+        path (Database): Remote URL and independent local cache anchor.
+
+    Returns:
+        Postgres: Initialized connection; caller closes it.
+
+    Raises:
+        RuntimeError: PostgreSQL connection or migration fails.
+        ValueError: The URL or schema is unsupported.
+    """  # noqa: DOC502 - Overload documents the runtime implementation.
+
+
+def connect(path: Location) -> Connection:
+    """Open the selected database while keeping local image caches independent.
+
+    Args:
+        path (Location): SQLite filename or explicit PostgreSQL target.
+
+    Returns:
+        Connection: Initialized database connection; caller must close it.
+
+    Raises:
+        OSError: The local database directory cannot be created.
+        sqlite3.Error: SQLite opening or migration fails.
+        RuntimeError: PostgreSQL opening or migration fails.
+        ValueError: The database URL or schema version is unsupported.
+    """  # noqa: DOC502 - Backend errors propagate.
+    if isinstance(path, Database):
+        # Keep existing SQLite-only Hermes hosts independent of the new driver.
+        from .postgres import (  # noqa: PLC0415 # pylint: disable=import-outside-toplevel
+            connect_postgres,
+        )
+
+        return connect_postgres(path.url)
+    return connect_sqlite(path)
+
+
+@overload
 @contextmanager
-def transaction(path: Path) -> Generator[sqlite3.Connection]:
+def transaction(path: Path) -> Generator[sqlite3.Connection]:  # noqa: D418 - Explicit docs.
+    """Scope one SQLite transaction and close it on either outcome.
+
+    Args:
+        path (Path): Local database filename outside the source checkout.
+
+    Yields:
+        sqlite3.Connection: Connection committed normally or rolled back on error.
+
+    Raises:
+        OSError: The parent directory cannot be created.
+        sqlite3.Error: Opening, migrating or finishing a transaction fails.
+        ValueError: The database schema is unsupported.
+    """  # noqa: DOC403,DOC502 - Overload documents the yielding implementation.
+
+
+@overload
+@contextmanager
+def transaction(path: Database) -> Generator[Postgres]:  # noqa: D418 - Explicit docs.
+    """Scope one PostgreSQL transaction and close it on either outcome.
+
+    Args:
+        path (Database): Remote URL and independent local cache anchor.
+
+    Yields:
+        Postgres: Connection committed normally or rolled back on error.
+
+    Raises:
+        RuntimeError: PostgreSQL operations fail.
+        ValueError: The URL or schema is unsupported.
+    """  # noqa: DOC403,DOC502 - Overload documents the yielding implementation.
+
+
+@contextmanager
+def transaction(path: Location) -> Generator[Connection]:
     """Open one transaction and close its connection on both success and failure.
 
     Args:
-        path (Path): Database filename.
+        path (Location): SQLite filename or PostgreSQL target.
 
     Yields:
-        sqlite3.Connection: Connection committed on normal exit, rolled back on error.
+        Connection: Connection committed on normal exit, rolled back on error.
 
     Raises:
         OSError: The database directory cannot be created.
         sqlite3.Error: Opening, committing or closing the database fails.
+        RuntimeError: PostgreSQL operations fail.
         ValueError: The schema is unsupported.
     """  # noqa: DOC502 - The connection implementation raises indirectly.
     database = connect(path)
@@ -212,11 +270,11 @@ def validate_order(values: dict[str, str]) -> dict[str, str]:
     return values
 
 
-def row_values(row: sqlite3.Row) -> dict[str, str]:
+def row_values(row: Row) -> dict[str, str]:
     """Convert a SQLite row into model-facing string fields.
 
     Args:
-        row (sqlite3.Row): Row whose columns contain text or integer metadata.
+        row (Row): Row whose columns contain text or integer metadata.
 
     Returns:
         dict[str, str]: Column names mapped to string values.
@@ -225,11 +283,11 @@ def row_values(row: sqlite3.Row) -> dict[str, str]:
     return {key: str(row[key]) for key in keys}
 
 
-def read_orders(database: sqlite3.Connection) -> list[dict[str, str]]:
+def read_orders(database: Connection) -> list[dict[str, str]]:
     """Read orders including reminder delivery state, sorted by deadline.
 
     Args:
-        database (sqlite3.Connection): Open connection using sqlite3.Row objects.
+        database (Connection): Open connection using sqlite3.Row objects.
 
     Returns:
         list[dict[str, str]]: Persisted fields; numeric delivery attempts as text.
@@ -270,11 +328,11 @@ def merge_order(params: dict[str, str], previous: dict[str, str]) -> dict[str, s
     return validate_order(values)
 
 
-def orders(path: Path, params: dict[str, str]) -> list[dict[str, str]]:
+def orders(path: Location, params: dict[str, str]) -> list[dict[str, str]]:
     """Create, update or list orders atomically; repeated creates are idempotent.
 
     Args:
-        path (Path): SQLite database filename.
+        path (Location): SQLite filename or PostgreSQL target with a local cache path.
         params (dict[str, str]): Action, stable id and optional ORDER_FIELDS. Empty
             dates clear them; a changed due date defaults its reminder to that date.
 

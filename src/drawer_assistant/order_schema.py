@@ -7,22 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import sqlite3
 
-STAGE_SCHEMA = """
-CREATE TABLE IF NOT EXISTS order_stages (
- order_id TEXT NOT NULL REFERENCES orders(id), id TEXT NOT NULL,
- parent_id TEXT, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
- comments TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending',
- due TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL DEFAULT 0,
- completed_at TEXT NOT NULL DEFAULT '', PRIMARY KEY(order_id,id),
- FOREIGN KEY(order_id,parent_id) REFERENCES order_stages(order_id,id)
-);
-CREATE TABLE IF NOT EXISTS stage_images (
- order_id TEXT NOT NULL, stage_id TEXT NOT NULL,
- reference_id TEXT NOT NULL REFERENCES refs(id),
- PRIMARY KEY(order_id,stage_id,reference_id),
- FOREIGN KEY(order_id,stage_id) REFERENCES order_stages(order_id,id)
-)
-"""
+from .schema import STAGE_SCHEMA
 
 
 def migrate_orders(database: sqlite3.Connection) -> None:

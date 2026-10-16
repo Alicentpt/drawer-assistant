@@ -13,7 +13,7 @@ from .network import object_map
 from .store import MAX_FIELD, transaction
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    from .database import Location
 
 MIN_FRAMES = 2
 
@@ -76,12 +76,12 @@ def specification(params: dict[str, object]) -> dict[str, object]:
 
 
 def start_batch(
-    path: Path, base: str, identifier: str, spec: dict[str, object]
+    path: Location, base: str, identifier: str, spec: dict[str, object]
 ) -> None:
     """Persist a batch intent, then submit each independently idempotent scene.
 
     Args:
-        path (Path): Shared artist database filename.
+        path (Location): Shared artist database filename.
         base (str): Configured Anima ComfyUI endpoint.
         identifier (str): Validated stable batch id, at most 48 characters.
         spec (dict[str, object]): Validated prompts and assembly layout.
@@ -95,7 +95,8 @@ def start_batch(
         KeyError: Required request, workflow or server fields are missing.
         OSError: Database, workflow or random source cannot be accessed.
         UnicodeError: Workflow or server data cannot be decoded.
-        RuntimeError: GPU-only preflight or ComfyUI request fails.
+        RuntimeError: PostgreSQL operations fail, or GPU-only preflight or
+            ComfyUI request fails.
         TypeError: Request data cannot be serialized.
         sqlite3.Error: Database operations fail.
     """  # noqa: DOC503 - Generation, serialization and storage errors propagate.
@@ -108,7 +109,7 @@ def start_batch(
             message = "Batch id already exists with different parameters."
             raise ValueError(message)
         database.execute(
-            "INSERT OR IGNORE INTO image_batches(id,spec) VALUES(?,?)",
+            "INSERT INTO image_batches(id,spec) VALUES(?,?) ON CONFLICT(id) DO NOTHING",
             (identifier, serialized),
         )
     for index, prompt in enumerate(strings(spec, "prompts"), 1):
@@ -126,12 +127,12 @@ def start_batch(
 
 
 def batch_status(
-    path: Path, base: str, identifier: str, executable: str
+    path: Location, base: str, identifier: str, executable: str
 ) -> dict[str, object]:
     """Read child jobs and publish a cached sheet only after every frame succeeds.
 
     Args:
-        path (Path): Shared artist database containing batch intent and child jobs.
+        path (Location): Shared artist database containing batch intent and child jobs.
         base (str): Configured Anima ComfyUI endpoint.
         identifier (str): Previously persisted stable batch id.
         executable (str): Optional absolute ImageMagick executable path.
@@ -147,7 +148,8 @@ def batch_status(
         ValueError: Saved metadata, response, schema, image or layout is invalid.
         OSError: Database, image or ImageMagick files cannot be accessed.
         UnicodeError: A server response cannot be decoded.
-        RuntimeError: A ComfyUI request or ImageMagick assembly fails.
+        RuntimeError: PostgreSQL operations fail, or a ComfyUI request or
+            ImageMagick assembly fails.
         TypeError: An API request cannot be serialized.
         sqlite3.Error: Reading or updating batch/job storage fails.
     """  # noqa: DOC503 - Delegated status, storage and assembly errors propagate.
@@ -232,12 +234,12 @@ def batch_status(
 
 
 def batch(
-    path: Path, base: str, params: dict[str, object], executable: str
+    path: Location, base: str, params: dict[str, object], executable: str
 ) -> dict[str, object]:
     """Start or poll a persistent Anima batch, waiting with bounded internal pauses.
 
     Args:
-        path (Path): Artist database path.
+        path (Location): Artist database path.
         base (str): Anima ComfyUI HTTP(S) endpoint.
         params (dict[str, object]): action=start/status and stable id (1..48 ASCII
             letters/digits/_/-). Start also requires prompts, accepts labels and
@@ -254,7 +256,8 @@ def batch(
         KeyError: Batch, required job or API field is missing.
         OSError: Local files, system clock or random source cannot be accessed.
         UnicodeError: Workflow or server responses cannot be decoded.
-        RuntimeError: ImageMagick is missing or GPU preflight, HTTP or assembly fails.
+        RuntimeError: PostgreSQL operations fail, or ImageMagick is missing
+            or GPU preflight, HTTP or assembly fails.
         TypeError: Request data cannot be serialized.
         sqlite3.Error: Batch or generation storage fails.
     """  # noqa: DOC503 - Delegated generation, storage and assembly errors propagate.

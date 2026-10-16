@@ -19,3 +19,29 @@ jobs:
       - run: uv sync --locked
       - run: uv run --no-sync poe check
       - run: uv run --no-sync poe audit
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres@sha256:2cd82735a36356842d5eb1ef80db3ae8f1154172f0f653db48fde079b2a0b7f7
+        env:
+          POSTGRES_DB: drawer_test
+          POSTGRES_USER: drawer_test
+          POSTGRES_PASSWORD: ephemeral-ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U drawer_test -d drawer_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      DRAWER_TEST_DATABASE_URL: postgresql://drawer_test:ephemeral-ci-password@127.0.0.1:5432/drawer_test
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.12.23"
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version-file: .python-version
+      - run: uv sync --locked
+      - run: uv run --no-sync pytest tests/test_postgres.py

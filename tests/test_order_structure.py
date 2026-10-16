@@ -13,15 +13,14 @@ import pytest
 from drawer_assistant.installation import cron_command
 from drawer_assistant.order_views import order_digest, order_info
 from drawer_assistant.references import references
-from drawer_assistant.stages import stages
-from drawer_assistant.store import (
+from drawer_assistant.schema import (
     ALIBABA_SCHEMA,
     ASSETS_SCHEMA,
     REFERENCE_FILES_SCHEMA,
     SCHEMA,
-    orders,
-    transaction,
 )
+from drawer_assistant.stages import stages
+from drawer_assistant.store import orders, transaction
 from drawer_assistant.time_display import local_time
 
 if TYPE_CHECKING:

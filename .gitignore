@@ -15,3 +15,4 @@ dist/
 htmlcov/
 *.log
 audit-requirements.txt
+/deployment/state/

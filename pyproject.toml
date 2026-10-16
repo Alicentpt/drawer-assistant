@@ -6,7 +6,8 @@ readme = "README.md"
 requires-python = ">=3.14,<3.15"
 license = "GPL-3.0-only"
 dependencies = [
-    "python-dotenv>=1.2.4",
+    "psycopg[binary]>=3.2,<4",
+    "python-dotenv>=1.2.2",
     "pyyaml>=6.0.3",
     "tzdata==2025.3",
 ]
@@ -17,6 +18,7 @@ build-backend = "hatchling.build"
 
 [project.scripts]
 drawer-setup = "drawer_assistant.setup:main"
+drawer-migrate = "drawer_assistant.migration:main"
 
 [dependency-groups]
 dev = [

@@ -12,7 +12,7 @@ from .store import read_orders, row_values, transaction
 from .time_display import TIMEZONE, local_time
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    from .database import Location
 
 STATUS_LABELS = {
     "open": "в работе",
@@ -66,11 +66,11 @@ def describe_stages(tree: list[dict[str, object]], depth: int = 0) -> list[str]:
     return lines
 
 
-def order_info(path: Path, identifier: str) -> dict[str, object]:
+def order_info(path: Location, identifier: str) -> dict[str, object]:
     """Read an entire order and return its ready-to-send Jessica card.
 
     Args:
-        path (Path): Artist database filename.
+        path (Location): Artist database filename.
         identifier (str): Existing order id, never inferred from conversation memory.
 
     Returns:
@@ -80,6 +80,7 @@ def order_info(path: Path, identifier: str) -> dict[str, object]:
         KeyError: The order or required persisted field is missing.
         ValueError: Schema, dates or stage structure is invalid.
         OSError: The database directory cannot be accessed.
+        RuntimeError: PostgreSQL operations fail.
         sqlite3.Error: Reading or committing the snapshot fails.
         OverflowError: Date conversion exceeds datetime bounds.
     """  # noqa: DOC503 - Storage and formatting errors propagate.
@@ -131,11 +132,11 @@ def order_info(path: Path, identifier: str) -> dict[str, object]:
     return {"text": text, "order": {**order, "stages": tree, "references": refs}}
 
 
-def order_digest(path: Path, now: datetime | None = None) -> dict[str, object]:
+def order_digest(path: Location, now: datetime | None = None) -> dict[str, object]:
     """Read overdue and upcoming orders and suggest priorities without writing them.
 
     Args:
-        path (Path): Artist database filename.
+        path (Location): Artist database filename.
         now (datetime | None, default=None): Aware window start; None uses current UTC.
 
     Returns:
@@ -146,6 +147,7 @@ def order_digest(path: Path, now: datetime | None = None) -> dict[str, object]:
         ValueError: The clock is naive, schema is invalid or a timestamp is malformed.
         KeyError: Required persisted fields are absent.
         OSError: Database directory cannot be accessed.
+        RuntimeError: PostgreSQL operations fail.
         sqlite3.Error: Reading or committing the snapshot fails.
         OverflowError: Date arithmetic exceeds datetime bounds.
     """  # noqa: DOC503 - Storage, arithmetic and parsing errors propagate.

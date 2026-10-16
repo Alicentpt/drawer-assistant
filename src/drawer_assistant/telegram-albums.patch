@@ -20,10 +20,7 @@
  
      # Bound for the per-(chat_id, status_key) status-message cache; FIFO half-trim on overflow.
      _STATUS_MESSAGE_IDS_MAX = 2000
-@@ -624,6 +635,10 @@
-         self._pending_photo_batch_tasks: Dict[str, asyncio.Task] = {}
-         self._media_group_events: Dict[str, MessageEvent] = {}
-         self._media_group_tasks: Dict[str, asyncio.Task] = {}
+@@ -627,3 +638,7 @@
 +        # Drawer compatibility: raw album updates wait for the shared caption before downloading.
 +        self._drawer_album_updates: Dict[str, list[tuple[Update, ContextTypes.DEFAULT_TYPE]]] = {}
 +        self._drawer_album_timers: Dict[str, asyncio.Task] = {}

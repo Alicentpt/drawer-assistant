@@ -15,7 +15,8 @@ import pytest
 from drawer_assistant import reference_files
 from drawer_assistant.plugin import handle
 from drawer_assistant.references import references
-from drawer_assistant.store import ALIBABA_SCHEMA, SCHEMA, orders, transaction
+from drawer_assistant.schema import ALIBABA_SCHEMA, SCHEMA
+from drawer_assistant.store import orders, transaction
 
 PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8A"

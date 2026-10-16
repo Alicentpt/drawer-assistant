@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from . import comfy
 from .anima_batch import batch, multipanel
+from .database import configured_database
 from .image_sheet import sheet
 from .network import object_map
 from .order_views import order_digest, order_info
@@ -20,6 +21,8 @@ from .time_display import TIMEZONE
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from .database import Location
 
 
 def read_persona(settings_file: Path, params: dict[str, str]) -> dict[str, str]:
@@ -79,12 +82,12 @@ class PluginContext(Protocol):  # pylint: disable=too-few-public-methods
 
 
 def gpu_tool(
-    path: Path, base: str, tool: str, arguments: dict[str, str]
+    path: Location, base: str, tool: str, arguments: dict[str, str]
 ) -> dict[str, str]:
     """Bind each ComfyUI model tool to its own fixed workflow for start and status.
 
     Args:
-        path (Path): Artist database.
+        path (Location): Artist database.
         base (str): Configured ComfyUI URL.
         tool (str): Registered model-specific tool or legacy drawer_generate.
         arguments (dict[str, str]): Action, id and optional generation prompt.
@@ -99,6 +102,7 @@ def gpu_tool(
         UnicodeError: Workflow or API response cannot be decoded.
         TypeError: An API graph cannot be serialized.
         RuntimeError: ComfyUI fails or GPU-only mode is not enabled.
+        RuntimeError: PostgreSQL operations fail.
         sqlite3.Error: Database operations fail.
     """  # noqa: DOC503 - Delegated generation and storage errors propagate.
     workflows = {
@@ -124,12 +128,12 @@ def gpu_tool(
 
 
 def order_tool(
-    path: Path, tool: str, arguments: dict[str, str], timezone: str = TIMEZONE
+    path: Location, tool: str, arguments: dict[str, str], timezone: str = TIMEZONE
 ) -> object:
     """Dispatch orders, stages, references and read-only views.
 
     Args:
-        path (Path): Artist database filename.
+        path (Location): Artist database filename.
         tool (str): Registered order/reference/stage/view tool name.
         arguments (dict[str, str]): Validated string arguments for the selected tool.
         timezone (str, default=TIMEZONE): Configured default zone for new orders.
@@ -141,6 +145,7 @@ def order_tool(
         ValueError: Stage fields, schema, dates or tree are invalid.
         KeyError: A required field, order, parent, image or stage is missing.
         OSError: Database files cannot be accessed.
+        RuntimeError: PostgreSQL operations fail.
         sqlite3.Error: Reading or committing data fails.
         OverflowError: Date conversion exceeds datetime bounds.
         RuntimeError: Downloading an explicitly selected reference fails.
@@ -180,7 +185,7 @@ def handle(
             settings = object_map(json.loads(settings_file.read_text("utf-8")))
             result = (
                 batch(
-                    Path(str(settings["database"])),
+                    configured_database(settings_file, settings),
                     str(
                         settings.get("comfy_anima_url") or settings["comfy_url"]
                     ).rstrip("/"),
@@ -189,7 +194,8 @@ def handle(
                 )
                 if tool == "drawer_anima_batch"
                 else sheet(
-                    Path(str(settings["database"])).parent / "image-sheets",
+                    configured_database(settings_file, settings).parent
+                    / "image-sheets",
                     params,
                     str(settings.get("imagemagick_binary") or ""),
                 )
@@ -219,7 +225,7 @@ def handle(
                 {"result": read_persona(settings_file, arguments)}, ensure_ascii=False
             )
         settings = object_map(json.loads(settings_file.read_text("utf-8")))
-        database = Path(str(settings["database"]))
+        database = configured_database(settings_file, settings)
         base = str(settings["comfy_url"]).rstrip("/")
         if tool == "drawer_anima":
             base = str(settings.get("comfy_anima_url") or base).rstrip("/")

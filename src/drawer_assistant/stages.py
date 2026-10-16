@@ -10,8 +10,7 @@ from .references import METADATA
 from .store import MAX_FIELD, row_values, transaction, utc
 
 if TYPE_CHECKING:
-    import sqlite3
-    from pathlib import Path
+    from .database import Connection, Location
 
 FIELDS = ("parent_id", "title", "description", "comments", "status", "due", "position")
 STATUSES = {"pending", "in_progress", "blocked", "done", "cancelled"}
@@ -19,17 +18,18 @@ MAX_DEPTH = 16
 MAX_POSITION_DIGITS = 6
 
 
-def stage_rows(database: sqlite3.Connection, order_id: str) -> list[dict[str, str]]:
+def stage_rows(database: Connection, order_id: str) -> list[dict[str, str]]:
     """Read ordered stage fields without image bytes or recursive expansion.
 
     Args:
-        database (sqlite3.Connection): Open connection with Row objects.
+        database (Connection): Open connection with Row objects.
         order_id (str): Parent order identifier.
 
     Returns:
         list[dict[str, str]]: Flat stage metadata, numeric fields rendered as text.
 
     Raises:
+        RuntimeError: PostgreSQL operations fail.
         sqlite3.Error: Reading stage metadata fails.
     """  # noqa: DOC502 - SQLite raises indirectly.
     return [
@@ -67,12 +67,12 @@ def validate_tree(rows: list[dict[str, str]]) -> None:
 
 
 def stage_tree(
-    database: sqlite3.Connection, order_id: str, parent_id: str = ""
+    database: Connection, order_id: str, parent_id: str = ""
 ) -> list[dict[str, object]]:
     """Expand one order's stages with children and image metadata.
 
     Args:
-        database (sqlite3.Connection): Open transaction for a consistent snapshot.
+        database (Connection): Open transaction for a consistent snapshot.
         order_id (str): Parent order identifier.
         parent_id (str, default=""): Parent stage; empty selects top-level stages.
 
@@ -80,6 +80,7 @@ def stage_tree(
         list[dict[str, object]]: Stage fields, nested children and images; no BLOBs.
 
     Raises:
+        RuntimeError: PostgreSQL operations fail.
         sqlite3.Error: Stage or reference metadata cannot be read.
         KeyError: Persisted stage metadata lacks a required column or parent.
         ValueError: Persisted parents form a cycle or exceed the depth limit.
@@ -109,11 +110,11 @@ def stage_tree(
     return result
 
 
-def write_stage(database: sqlite3.Connection, params: dict[str, str]) -> None:
+def write_stage(database: Connection, params: dict[str, str]) -> None:
     """Create or patch a stage while retaining siblings, results and completion time.
 
     Args:
-        database (sqlite3.Connection): Existing writable transaction.
+        database (Connection): Existing writable transaction.
         params (dict[str, str]): create/update, order_id/id and changed stage fields.
 
     Returns:
@@ -122,6 +123,7 @@ def write_stage(database: sqlite3.Connection, params: dict[str, str]) -> None:
     Raises:
         ValueError: Fields, status, identifier, dates, duplicate id or tree are invalid.
         KeyError: Order, stage, parent or a required argument is missing.
+        RuntimeError: PostgreSQL operations fail.
         sqlite3.Error: Reading or writing stage data fails.
         OverflowError: Date conversion exceeds datetime bounds.
     """  # noqa: DOC503 - Validation, SQL and mapping errors propagate.
@@ -184,11 +186,11 @@ def write_stage(database: sqlite3.Connection, params: dict[str, str]) -> None:
     )
 
 
-def stages(path: Path, params: dict[str, str]) -> list[dict[str, object]]:
+def stages(path: Location, params: dict[str, str]) -> list[dict[str, object]]:
     """Manage nested stages or attach an already saved binary reference to a stage.
 
     Args:
-        path (Path): Orders and reference database filename.
+        path (Location): Orders and reference database filename.
         params (dict[str, str]): action create/update/list/attach, order_id, stage id;
             attach additionally requires reference_id belonging to that order.
 
@@ -199,6 +201,7 @@ def stages(path: Path, params: dict[str, str]) -> list[dict[str, object]]:
         ValueError: Action, stage fields, image storage or tree is invalid.
         KeyError: Required arguments, order, stage, reference or parent is missing.
         OSError: Database directory cannot be accessed.
+        RuntimeError: PostgreSQL operations fail.
         sqlite3.Error: Reading or committing the operation fails.
         OverflowError: Timestamp conversion exceeds datetime bounds.
     """  # noqa: DOC503 - Storage and validation errors propagate.

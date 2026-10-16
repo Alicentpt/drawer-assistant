@@ -10,8 +10,7 @@ from .reference_files import load_image, materialize
 from .store import MAX_FIELD, row_values, transaction
 
 if TYPE_CHECKING:
-    import sqlite3
-    from pathlib import Path
+    from .database import Connection, Location
 
 FIELDS = ("title", "url", "order_id", "notes")
 METADATA = """
@@ -25,14 +24,14 @@ LEFT JOIN assets ON reference_files.sha256=assets.sha256
 
 
 def save_reference(
-    database: sqlite3.Connection,
+    database: Connection,
     params: dict[str, str],
     image: tuple[str, str, bytes] | None,
 ) -> None:
     """Upsert metadata and optional image within the caller's atomic transaction.
 
     Args:
-        database (sqlite3.Connection): Open writable transaction using Row objects.
+        database (Connection): Open writable transaction using Row objects.
         params (dict[str, str]): Stable id and changed metadata fields. New references
             need title and either url or an image; omitted fields retain old values.
         image (tuple[str, str, bytes] | None): Filename, MIME and bounded image bytes,
@@ -44,6 +43,7 @@ def save_reference(
     Raises:
         ValueError: Identifier, title, URL, length or source is invalid.
         KeyError: Required id or linked order is missing.
+        RuntimeError: PostgreSQL operations fail.
         sqlite3.Error: Reading or writing the database fails.
     """  # noqa: DOC503 - SQL and mapping errors propagate.
     identifier = params["id"]
@@ -114,11 +114,11 @@ def save_reference(
         )
 
 
-def references(path: Path, params: dict[str, str]) -> list[dict[str, str]]:
+def references(path: Location, params: dict[str, str]) -> list[dict[str, str]]:
     """Save binary references, list metadata or restore one image for delivery.
 
     Args:
-        path (Path): SQLite filename; exports live in reference-exports beside it.
+        path (Location): SQLite filename; exports live in reference-exports beside it.
         params (dict[str, str]): Action save/list/get. save takes id, metadata and
             optional file/image_url; list optionally filters by order_id; get needs id.
 
@@ -130,7 +130,8 @@ def references(path: Path, params: dict[str, str]) -> list[dict[str, str]]:
         ValueError: Action, fields, image, integrity or database schema is invalid.
         KeyError: Required argument, reference, linked order or MIME is missing.
         OSError: Image files, exports or database directory cannot be accessed.
-        RuntimeError: Downloading an explicitly requested image fails.
+        RuntimeError: PostgreSQL operations or an explicitly requested image
+            download fail.
         sqlite3.Error: Reading or committing the transaction fails.
     """  # noqa: DOC503 - Includes delegated storage and image errors.
     action = params["action"]
@@ -157,11 +158,12 @@ def references(path: Path, params: dict[str, str]) -> list[dict[str, str]]:
             raise KeyError(params["id"])
         result = row_values(row)
         if action == "get" and result["storage"] == "blob":
-            data = bytes(
-                database.execute(
-                    "SELECT data FROM assets WHERE sha256=?", (result["sha256"],)
-                ).fetchone()[0]
-            )
+            asset = database.execute(
+                "SELECT data FROM assets WHERE sha256=?", (result["sha256"],)
+            ).fetchone()
+            if asset is None:
+                raise KeyError(result["sha256"])
+            data = bytes(asset["data"])
             file = materialize(
                 path.parent / "reference-exports",
                 data,

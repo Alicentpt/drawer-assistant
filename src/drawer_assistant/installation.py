@@ -66,7 +66,7 @@ def install_files(profile: Path, env_file: Path) -> None:
     if settings.get("DASHSCOPE_BASE_URL"):
         endpoint(str(settings["DASHSCOPE_BASE_URL"]))
     set_key(profile / ".env", "HERMES_TIMEZONE", timezone)
-    for key in ("DASHSCOPE_API_KEY", "DASHSCOPE_BASE_URL"):
+    for key in ("DASHSCOPE_API_KEY", "DASHSCOPE_BASE_URL", "DRAWER_DATABASE_URL"):
         if key in settings:
             set_key(profile / ".env", key, settings[key] or "")
     source = Path(__file__).parent

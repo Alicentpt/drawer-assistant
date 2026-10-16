@@ -8,11 +8,14 @@ import secrets
 from contextlib import closing
 from pathlib import Path
 from time import monotonic, sleep
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from urllib.parse import urlencode
 
 from .network import api, object_map, request
 from .store import MAX_FIELD, connect, row_values, transaction
+
+if TYPE_CHECKING:
+    from .database import Location
 
 WORKFLOWS = (
     "zimage-w4a8-abliterated",
@@ -27,12 +30,12 @@ ANIMA_PREFIX = (
 
 
 def wait_status(
-    path: Path, base: str, identifier: str, workflow_name: str
+    path: Location, base: str, identifier: str, workflow_name: str
 ) -> dict[str, str]:
     """Wait briefly between status checks instead of driving an agent retry loop.
 
     Args:
-        path (Path): Artist job database filename.
+        path (Location): Artist job database filename.
         base (str): Configured ComfyUI HTTP(S) base URL.
         identifier (str): Existing stable job id; never submits a new generation.
         workflow_name (str): Required model workflow for this job.
@@ -49,7 +52,7 @@ def wait_status(
         OSError: Database, downloaded image or system clock cannot be accessed.
         UnicodeError: A server response cannot be decoded.
         sqlite3.Error: Job storage fails.
-        RuntimeError: A ComfyUI HTTP request fails.
+        RuntimeError: PostgreSQL operations fail, or a ComfyUI HTTP request fails.
         TypeError: An API request cannot be serialized.
     """  # noqa: DOC502 - Status, storage and clock errors propagate indirectly.
     deadline = monotonic() + 25
@@ -142,11 +145,11 @@ def workflow(name: str, prompt: str) -> dict[str, object]:
     return graph
 
 
-def start(path: Path, base: str, params: dict[str, str]) -> dict[str, str]:
+def start(path: Location, base: str, params: dict[str, str]) -> dict[str, str]:
     """Persist a request before submission so uncertain POSTs are never retried.
 
     Args:
-        path (Path): SQLite database filename.
+        path (Location): SQLite database filename.
         base (str): Operator-configured ComfyUI HTTP(S) base URL.
         params (dict[str, str]): Stable id, prompt and optional workflow name.
 
@@ -159,7 +162,8 @@ def start(path: Path, base: str, params: dict[str, str]) -> dict[str, str]:
         OSError: Database, workflow or random source cannot be accessed.
         UnicodeError: Workflow or server response text is invalid.
         sqlite3.Error: A database operation fails.
-        RuntimeError: ComfyUI fails or was started without GPU-only mode.
+        RuntimeError: PostgreSQL operations fail, or ComfyUI fails or was
+            started without GPU-only mode.
         TypeError: A packaged API graph cannot be serialized.
     """  # noqa: DOC503 - Includes delegated HTTP/storage errors.
     identifier = params["id"]
@@ -210,11 +214,13 @@ def start(path: Path, base: str, params: dict[str, str]) -> dict[str, str]:
     }
 
 
-def save_image(path: Path, base: str, record: dict[str, object], prompt_id: str) -> str:
+def save_image(
+    path: Location, base: str, record: dict[str, object], prompt_id: str
+) -> str:
     """Download a completed workflow's PNG into the local image directory.
 
     Args:
-        path (Path): Database path used to locate its sibling images directory.
+        path (Location): Database path used to locate its sibling images directory.
         base (str): Configured ComfyUI base URL.
         record (dict[str, object]): Completed history record from ComfyUI.
         prompt_id (str): Validated ComfyUI UUID used as a local filename.
@@ -250,12 +256,12 @@ def save_image(path: Path, base: str, record: dict[str, object], prompt_id: str)
 
 
 def status(
-    path: Path, base: str, identifier: str, *, workflow_name: str = ""
+    path: Location, base: str, identifier: str, *, workflow_name: str = ""
 ) -> dict[str, str]:
     """Poll a known generation and save its image locally for Hermes delivery.
 
     Args:
-        path (Path): SQLite database filename; images are stored beside it.
+        path (Location): SQLite database filename; images are stored beside it.
         base (str): Operator-configured ComfyUI HTTP(S) base URL.
         identifier (str): Previously submitted stable generation id.
         workflow_name (str, default=""): Required workflow; empty allows legacy jobs.
@@ -270,7 +276,7 @@ def status(
         OSError: Database directory or generated image cannot be written.
         UnicodeError: A server response cannot be decoded.
         sqlite3.Error: A database operation fails.
-        RuntimeError: The HTTP request fails.
+        RuntimeError: PostgreSQL operations fail, or the HTTP request fails.
         TypeError: An API request cannot be serialized.
     """  # noqa: DOC503 - Includes delegated HTTP/storage errors.
     with transaction(path) as database:
