@@ -6,8 +6,9 @@ services:
       dockerfile: deployment/Dockerfile
     image: drawer-hermes:postgres
     restart: unless-stopped
-    # Matches upstream Linux deployment and uses host Tailscale routes/DNS.
-    network_mode: host
+    # Outbound connections use host routes; isolate ports from other host agents.
+    dns:
+      - 100.100.100.100
     volumes:
       - ./state/hermes:/opt/data
     environment:

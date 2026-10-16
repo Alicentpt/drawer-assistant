@@ -42,7 +42,10 @@ sudo docker compose -f deployment/compose.yaml config --quiet
 ```
 
 Образ закрепляет официальный Hermes по digest, добавляет драйвер PostgreSQL,
-наш пакет и ImageMagick 7. Сохраняет штатный entrypoint и supervision Hermes.
+наш пакет и ImageMagick 7. Python-пакеты плагина лежат отдельно в
+`/opt/drawer-python`, подключённом через `.pth`, в том числе для subprocess tools.
+Закреплённые пакеты Hermes не обновляются. Образ сохраняет штатный
+entrypoint и supervision Hermes.
 Секреты и пользовательские файлы исключены из build context.
 
 `state/hermes` монтируется в `/opt/data`. UID/GID по умолчанию 1000/1000;
@@ -50,8 +53,12 @@ sudo docker compose -f deployment/compose.yaml config --quiet
 настраивается через `HERMES_MEMORY_LIMIT`. На EC2 заранее проверить свободную
 память: существующие сервисы не останавливать ради запуска бота.
 
-Сеть контейнера — `host`, как в upstream Compose. На EC2 должен работать
-Tailscale в нужной сети. До запуска проверить HTTPS ComfyUI `system_stats`.
+Сеть контейнера — отдельный Docker bridge без опубликованных портов, чтобы
+соседний Hermes на EC2 имел собственные порты и управляющие сокеты.
+Исходящий трафик использует маршруты хоста; на EC2 должен работать Tailscale
+в нужной сети. DNS контейнера — Tailscale `100.100.100.100`: это разрешает имена
+`*.ts.net`, сохраняя DNS хоста. Проверить RDS и HTTPS ComfyUI `system_stats`
+из контейнера.
 
 ## Подготовка профиля
 
@@ -82,10 +89,16 @@ Tailscale в нужной сети. До запуска проверить HTTPS
 
    ```bash
    sudo docker compose -f deployment/compose.yaml run --rm --no-deps \
-     --entrypoint /opt/hermes/.venv/bin/drawer-setup hermes \
+     --user 1000:1000 --entrypoint /opt/drawer-python/bin/drawer-setup \
+     -e HERMES_HOME=/opt/data -e HOME=/opt/data \
+     -e PATH=/opt/drawer-python/bin:/opt/hermes/.venv/bin:/usr/bin:/bin hermes \
      --profile-dir /opt/data/profiles/drawer-assistant \
      --env-file /opt/data/drawer.env
    ```
+
+   Это отдельная CLI-операция без s6 и запуска poller. UID/GID должны совпадать
+   с владельцем volume (по умолчанию 1000:1000). Обычный gateway запускается
+   штатным entrypoint, без `--user` и без его переопределения.
 
    Настройщик сохраняет пользовательский SOUL, обновляет плагин, проверяет патч
    Telegram, пересоздаёт Linux-пути и обновляет два cron по имени: каждые 30 минут
