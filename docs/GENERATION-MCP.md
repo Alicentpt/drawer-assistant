@@ -200,8 +200,20 @@ uv export --quiet --locked --no-dev --no-emit-project --format requirements-txt 
 
 Комплект: `deployment/install-anima-controls.ps1` плюс `revisions.json`,
 `style-compat.patch`, `depth-dtype.patch` из `experiments/anima-controls`.
-В закрытом ComfyUI запустить PowerShell-скрипт. Он спрашивает папку ComfyUI
-и его Python, не ставит новый Python, сохраняет текущие версии torch/numpy.
+Закрыть ComfyUI, распаковать весь архив, дважды нажать `install-anima-controls.cmd`.
+Для восстановления Python-пакетов без скачивания нод и весов —
+`repair-anima-python.cmd`. Активация venv и глобальная смена ExecutionPolicy не нужны.
+Скрипт ищет папку в Desktop config.json; если однозначного совпадения нет,
+предлагает выбрать папку ComfyUI с custom_nodes и .venv. Использует только
+`.venv/Scripts/python.exe` этой установки (или явно переданный -Python),
+не выбирает случайный системный Python и не ставит новый.
+Показывает путь к окружению; transcript `install-*.log` сохраняется рядом со скриптом.
+Python-код передаётся через stdin, чтобы избежать потери кавычек в PowerShell 5.1.
+Для пакетов использует доступный uv с явным --python; если uv нет — pip выбранного
+окружения, ensurepip нужен только при отсутствии обоих. Сохраняет версии torch/numpy
+через constraints; устанавливает nvidia-ml-py при отсутствии импорта pynvml,
+проверяет CUDA и нужные импорты. requirements существующего controlnet_aux
+проверяются и при повторном запуске, не только при первом клонировании.
 Другую версию существующих нод/весов не перезаписывает.
 
 Style patch исправляет только compute dtype и изоляцию LoRA между заданиями;

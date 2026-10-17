@@ -5,12 +5,63 @@ param(
     [string]$ComfyRoot,
     [string]$Python,
     [string]$ModelsRoot,
-    [string]$CharacterSource
+    [string]$CharacterSource,
+    [switch]$DependenciesOnly
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $packageRoot = Split-Path -Parent $PSCommandPath
 $pins = Get-Content -LiteralPath (Join-Path $packageRoot 'revisions.json') -Raw | ConvertFrom-Json
+$logPath = Join-Path $packageRoot ('install-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
+Start-Transcript -LiteralPath $logPath | Out-Null
+
+function Run-Python([string]$Code, [string[]]$Arguments = @()) {
+    # Send code over stdin: Windows PowerShell 5.1 removes quotes from -c code.
+    $Code | & $Python - @Arguments
+    if ($LASTEXITCODE -ne 0) { throw "ComfyUI Python failed (exit $LASTEXITCODE). Log: $logPath" }
+}
+function Test-Python([string]$Code) {
+    $previousPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $Code | & $Python - 1>$null 2>$null
+        return $LASTEXITCODE -eq 0
+    } finally { $ErrorActionPreference = $previousPreference }
+}
+function Find-ComfyRoot {
+    $candidates = @((Get-Location).Path, (Join-Path $HOME 'Documents\ComfyUI'))
+    foreach ($app in @('ComfyUI', 'Comfy Desktop')) {
+        $configPath = Join-Path $env:APPDATA "$app\config.json"
+        if (Test-Path -LiteralPath $configPath) {
+            $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+            foreach ($key in @('basePath', 'installPath')) {
+                if ($config.$key) { $candidates += [string]$config.$key }
+            }
+        }
+    }
+    $candidates = @($candidates | ForEach-Object { $_; Join-Path $_ 'ComfyUI' })
+    $found = @($candidates | Where-Object {
+        (Test-Path -LiteralPath (Join-Path $_ 'custom_nodes')) -and
+        (Test-Path -LiteralPath (Join-Path $_ '.venv\Scripts\python.exe'))
+    } | Select-Object -Unique)
+    if ($found.Count -eq 1) { return $found[0] }
+    return Select-Folder 'Select your ComfyUI installation folder (or the folder containing custom_nodes and .venv)'
+}
+function Install-Packages([string[]]$Packages) {
+    if ($Uv) {
+        # uv accepts file URIs without splitting paths containing spaces.
+        $uvPackages = @($Packages)
+        for ($index = 0; $index -lt $uvPackages.Count - 1; $index++) {
+            if ($uvPackages[$index] -eq '-r') {
+                $uvPackages[$index + 1] = ([System.Uri](Resolve-Path -LiteralPath $uvPackages[$index + 1]).Path).AbsoluteUri
+            }
+        }
+        $constraintUri = ([System.Uri]$constraints).AbsoluteUri
+        Run-Checked $Uv (@('pip', 'install', '--python', $Python, '--constraint', $constraintUri) + $uvPackages)
+    } else {
+        Run-Checked $Python (@('-m', 'pip', 'install', '--constraint', $constraints) + $Packages)
+    }
+}
 
 function Select-Folder([string]$Description) {
     Add-Type -AssemblyName System.Windows.Forms
@@ -80,42 +131,72 @@ function Apply-Patch([string]$Directory, [string]$PatchName, [string]$Source, [s
     Run-Checked 'git' @('-C', $Directory, 'apply', $patch)
 }
 
-if (-not $ComfyRoot) { $ComfyRoot = Select-Folder 'Select ComfyUI DATA folder containing custom_nodes and .venv' }
+try {
+if (-not $ComfyRoot) { $ComfyRoot = Find-ComfyRoot }
 $ComfyRoot = (Resolve-Path -LiteralPath $ComfyRoot).Path
+if (-not (Test-Path -LiteralPath (Join-Path $ComfyRoot 'custom_nodes')) -and
+    (Test-Path -LiteralPath (Join-Path $ComfyRoot 'ComfyUI\custom_nodes'))) {
+    $ComfyRoot = Join-Path $ComfyRoot 'ComfyUI'
+}
 if (-not (Test-Path -LiteralPath (Join-Path $ComfyRoot 'custom_nodes'))) {
     throw 'Wrong ComfyUI folder: custom_nodes is missing.'
 }
 if (-not $Python) {
     $Python = Join-Path $ComfyRoot '.venv\Scripts\python.exe'
     if (-not (Test-Path -LiteralPath $Python)) {
-        Add-Type -AssemblyName System.Windows.Forms
-        $dialog = New-Object System.Windows.Forms.OpenFileDialog
-        $dialog.Title = 'Select the python.exe used by ComfyUI (not system Python)'
-        $dialog.Filter = 'Python|python.exe'
-        if ($dialog.ShowDialog() -ne 'OK') { throw 'Python selection cancelled.' }
-        $Python = $dialog.FileName
+        throw "ComfyUI Python not found: $Python. Select the ComfyUI data folder containing .venv; no global Python is used."
     }
 }
 if (-not $ModelsRoot) { $ModelsRoot = Join-Path $ComfyRoot 'models' }
 if (Get-Process -Name 'ComfyUI', 'Comfy Desktop' -ErrorAction SilentlyContinue) {
     throw 'Close ComfyUI Desktop before running the installer.'
 }
-Get-Command git, curl.exe -ErrorAction Stop | Out-Null
-Run-Checked $Python @('-c', 'import torch; assert torch.cuda.is_available(), "Select the CUDA-enabled ComfyUI Python"; print(torch.cuda.get_device_name())')
-Run-Checked $Python @('-m', 'ensurepip')
+Write-Host "ComfyUI folder: $ComfyRoot"
+Write-Host "Python: $Python"
+$Uv = $null
+$uvCommand = Get-Command uv.exe -ErrorAction SilentlyContinue
+if ($uvCommand) { $Uv = $uvCommand.Source }
+if (-not $Uv) {
+    foreach ($candidate in @(
+        (Join-Path $ComfyRoot '.venv\Scripts\uv.exe'),
+        (Join-Path (Split-Path -Parent $ComfyRoot) 'standalone-env\uv.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Programs\ComfyUI\resources\uv\win\uv.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Programs\Comfy Desktop\resources\uv\win\uv.exe'),
+        (Join-Path $HOME '.local\bin\uv.exe')
+    )) {
+        if (Test-Path -LiteralPath $candidate) { $Uv = $candidate; break }
+    }
+}
+if (-not $Uv -and -not (Test-Command $Python @('-m', 'pip', '--version'))) {
+    Run-Checked $Python @('-m', 'ensurepip')
+}
 $constraints = Join-Path $packageRoot 'installed-gpu-constraints.txt'
-Run-Checked $Python @('-c', 'import importlib.metadata,pathlib,sys; names=["torch","torchvision","torchaudio","numpy"]; rows=[]
+Run-Python 'import importlib.metadata,pathlib,sys; names=["torch","torchvision","torchaudio","numpy"]; rows=[]
 for n in names:
  try: rows.append(n+"=="+importlib.metadata.version(n))
  except importlib.metadata.PackageNotFoundError: pass
-pathlib.Path(sys.argv[1]).write_text("\n".join(rows))', $constraints)
+pathlib.Path(sys.argv[1]).write_text("\n".join(rows))' @($constraints)
+if (-not (Test-Python 'import pynvml')) {
+    Install-Packages @('nvidia-ml-py==13.580.82')
+}
+Run-Python 'import sys,torch,pynvml; print("Environment:", sys.executable); print("Torch:",torch.__version__); assert torch.cuda.is_available(), "ComfyUI environment has no working CUDA. Its torch/driver was not changed."; print("GPU:",torch.cuda.get_device_name())'
+if (-not (Test-Python 'from transformers import SiglipVisionModel, Siglip2VisionModel; import sentencepiece')) {
+    Install-Packages @('transformers==4.57.1', 'sentencepiece==0.2.1')
+}
+$aux = Join-Path $ComfyRoot 'custom_nodes\comfyui_controlnet_aux'
+if (Test-Path -LiteralPath (Join-Path $aux 'requirements.txt')) {
+    Install-Packages @('-r', (Join-Path $aux 'requirements.txt'))
+}
+if ($DependenciesOnly) {
+    Run-Python 'import pynvml; from transformers import SiglipVisionModel, Siglip2VisionModel; import sentencepiece; print("Python dependencies verified.")'
+    Write-Host 'Done. Restart ComfyUI. If a node still fails, send its error from the ComfyUI log.'
+    exit 0
+}
+Get-Command git, curl.exe -ErrorAction Stop | Out-Null
 
 Write-Host '1/3 STYLE: nodes, compatibility patch, weights and SigLIP2'
 $style = Install-Repository 'ComfyUI-Anima_IP-Adapter' 'https://github.com/LuciferTC9527/ComfyUI-Anima_IP-Adapter' $pins.style.revision
 Apply-Patch $style 'style-compat.patch' 'nodes.py' $pins.style.patch_source_sha256 $pins.style.previous_patch_sha256 $pins.style.patched_sha256
-if (-not (Test-Command $Python @('-c', 'from transformers import Siglip2VisionModel; import sentencepiece'))) {
-    Run-Checked $Python @('-m', 'pip', 'install', '--constraint', $constraints, 'transformers==4.57.1', 'sentencepiece==0.2.1')
-}
 Download-File "https://huggingface.co/LuciferTC/Anima-IP-Adapter/resolve/$($pins.style_weights.revision)/ip_adapter-Character_Reference-10.safetensors" (Join-Path $ModelsRoot 'ipadapter\ip_adapter-Character_Reference-10.safetensors') 'dc9612cc28b55f00ba39f6169bfe4871130be028a55682ab54dd51360acb8232'
 $siglip = Join-Path $ModelsRoot 'siglip2\siglip2-base-patch16-512'
 foreach ($name in @('config.json', 'model.safetensors', 'preprocessor_config.json', 'special_tokens_map.json', 'tokenizer.json', 'tokenizer.model', 'tokenizer_config.json')) {
@@ -131,7 +212,7 @@ Apply-Patch $depth 'depth-dtype.patch' 'adv_control\control_anima_vace.py' $pins
 $aux = Join-Path $ComfyRoot 'custom_nodes\comfyui_controlnet_aux'
 if (-not (Test-Path -LiteralPath $aux)) {
     $aux = Install-Repository 'comfyui_controlnet_aux' 'https://github.com/Fannovel16/comfyui_controlnet_aux' $pins.preprocessors.revision
-    Run-Checked $Python @('-m', 'pip', 'install', '--constraint', $constraints, '-r', (Join-Path $aux 'requirements.txt'))
+    Install-Packages @('-r', (Join-Path $aux 'requirements.txt'))
 }
 Download-File "https://huggingface.co/TaihoC/Anima-ControlNet-VACE-Depth/resolve/$($pins.depth_weights.revision)/anima-vace-depth.safetensors" (Join-Path $ModelsRoot 'controlnet\anima-vace-depth.safetensors') '29762e7037bd74b70abaa832c79d10159d5e7e0612045961318e304eb50e802d'
 Download-File 'https://huggingface.co/depth-anything/Depth-Anything-V2-Small/resolve/03876f8651c73a60fe4c2c48294e09fcb6838fcf/depth_anything_v2_vits.pth' (Join-Path $aux 'ckpts\depth-anything\Depth-Anything-V2-Small\depth_anything_v2_vits.pth') '715fade13be8f229f8a70cc02066f656f2423a59effd0579197bbf57860e1378'
@@ -176,3 +257,10 @@ if ($CharacterSource) {
     }
 }
 Write-Host 'Installed. Restart ComfyUI with --gpu-only, then ask Jessica for generation_health.'
+} catch {
+    Write-Host "INSTALLATION STOPPED: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Log saved to: $logPath"
+    exit 1
+} finally {
+    Stop-Transcript | Out-Null
+}
