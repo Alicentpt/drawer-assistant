@@ -49,7 +49,7 @@ function Download-File([string]$Url, [string]$Destination, [string]$Sha256 = '')
 function Install-Repository([string]$Name, [string]$Url, [string]$Revision) {
     $destination = Join-Path (Join-Path $ComfyRoot 'custom_nodes') $Name
     if (-not (Test-Path -LiteralPath $destination)) {
-        Run-Checked 'git' @('clone', '--filter=blob:none', '--no-checkout', $Url, $destination)
+        Run-Checked 'git' @('clone', '-c', 'core.autocrlf=false', '--filter=blob:none', '--no-checkout', $Url, $destination)
         Run-Checked 'git' @('-C', $destination, 'fetch', '--depth', '1', 'origin', $Revision)
         Run-Checked 'git' @('-C', $destination, 'checkout', '--detach', $Revision)
     }
@@ -59,9 +59,20 @@ function Install-Repository([string]$Name, [string]$Url, [string]$Revision) {
     }
     return $destination
 }
-function Apply-Patch([string]$Directory, [string]$PatchName, [string]$Source, [string]$Expected) {
+function Apply-Patch([string]$Directory, [string]$PatchName, [string]$Source, [string]$Expected, [string]$Previous, [string]$Applied) {
     $patch = Join-Path $packageRoot $PatchName
-    if (Test-Command 'git' @('-C', $Directory, 'apply', '--reverse', '--check', $patch)) { return }
+    $sourcePath = Join-Path $Directory $Source
+    if ((Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash -eq $Previous) {
+        # Replace only the exact previous patch; preserve all unknown local edits.
+        $backup = $sourcePath + '.before-controls-update'
+        if (-not (Test-Path -LiteralPath $backup)) { Copy-Item -LiteralPath $sourcePath -Destination $backup }
+        Run-Checked 'git' @('-C', $Directory, '-c', 'core.autocrlf=false', 'restore', '--source=HEAD', '--worktree', '--', $Source)
+        Write-Host "Removed previous patch from $Source; backup: $backup"
+    }
+    if ((Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash -eq $Applied) {
+        Run-Checked 'git' @('-C', $Directory, 'apply', '--reverse', '--check', $patch)
+        return
+    }
     if ((Get-FileHash -LiteralPath (Join-Path $Directory $Source) -Algorithm SHA256).Hash -ne $Expected) {
         throw "Cannot patch a different source version: $Source"
     }
@@ -99,9 +110,9 @@ for n in names:
  except importlib.metadata.PackageNotFoundError: pass
 pathlib.Path(sys.argv[1]).write_text("\n".join(rows))', $constraints)
 
-Write-Host '1/3 STYLE: nodes, GPU-only patch, weights and SigLIP2'
+Write-Host '1/3 STYLE: nodes, compatibility patch, weights and SigLIP2'
 $style = Install-Repository 'ComfyUI-Anima_IP-Adapter' 'https://github.com/LuciferTC9527/ComfyUI-Anima_IP-Adapter' $pins.style.revision
-Apply-Patch $style 'style-gpu-only.patch' 'nodes.py' $pins.style.patch_source_sha256
+Apply-Patch $style 'style-compat.patch' 'nodes.py' $pins.style.patch_source_sha256 $pins.style.previous_patch_sha256 $pins.style.patched_sha256
 if (-not (Test-Command $Python @('-c', 'from transformers import Siglip2VisionModel; import sentencepiece'))) {
     Run-Checked $Python @('-m', 'pip', 'install', '--constraint', $constraints, 'transformers==4.57.1', 'sentencepiece==0.2.1')
 }
@@ -116,7 +127,7 @@ Write-Host '2/3 DEPTH: ControlNet, preprocessor and weights'
 $conflicts = Get-ChildItem -LiteralPath (Join-Path $ComfyRoot 'custom_nodes') -Directory | Where-Object { $_.Name -match 'advanced.?controlnet' -and $_.Name -ne 'ComfyUI-Advanced-ControlNet' }
 if ($conflicts) { throw 'Another Advanced ControlNet folder exists. Disable it before installing this fork.' }
 $depth = Install-Repository 'ComfyUI-Advanced-ControlNet' 'https://github.com/PineCookie/ComfyUI-Advanced-ControlNet' $pins.depth.revision
-Apply-Patch $depth 'depth-dtype.patch' 'adv_control\control_anima_vace.py' $pins.depth.patch_source_sha256
+Apply-Patch $depth 'depth-dtype.patch' 'adv_control\control_anima_vace.py' $pins.depth.patch_source_sha256 $pins.depth.previous_patch_sha256 $pins.depth.patched_sha256
 $aux = Join-Path $ComfyRoot 'custom_nodes\comfyui_controlnet_aux'
 if (-not (Test-Path -LiteralPath $aux)) {
     $aux = Install-Repository 'comfyui_controlnet_aux' 'https://github.com/Fannovel16/comfyui_controlnet_aux' $pins.preprocessors.revision

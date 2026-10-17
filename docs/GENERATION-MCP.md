@@ -199,10 +199,16 @@ uv export --quiet --locked --no-dev --no-emit-project --format requirements-txt 
 ## Установка нод художнице
 
 Комплект: `deployment/install-anima-controls.ps1` плюс `revisions.json`,
-`style-gpu-only.patch`, `depth-dtype.patch` из `experiments/anima-controls`.
+`style-compat.patch`, `depth-dtype.patch` из `experiments/anima-controls`.
 В закрытом ComfyUI запустить PowerShell-скрипт. Он спрашивает папку ComfyUI
 и его Python, не ставит новый Python, сохраняет текущие версии torch/numpy.
 Другую версию существующих нод/весов не перезаписывает.
+
+Style patch исправляет только compute dtype и изоляцию LoRA между заданиями;
+штатная выгрузка SigLIP на CPU сохранена. Depth patch исправляет только dtype
+входа, без обработки дополнительных кадров старого AiO. При повторном запуске
+скрипт заменяет точную прежнюю версию наших патчей, сохраняя исходник в
+`.before-controls-update`; неизвестные изменения файлов не перезаписывает.
 
 На момент подготовки прежний Character источник отвечает HTTP 401.
 Для уже скачанной разрешённой копии репозитория: `-CharacterSource "D:\Anima-InContext-Character"`.

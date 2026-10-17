@@ -79,7 +79,8 @@ baseline/соответствующим standalone (ImageMagick AE = 0). Это 
 переключает positive/negative conditioning через два lazy switch. Depth может
 работать без Pose, с Pose и вместе с Character/Style. По умолчанию Depth off.
 Depth hook исправлен: контроль воздействует на генерируемый кадр, не на чистые
-reference frames InContext. Патч закреплён в depth-dtype.patch.
+reference frames InContext. Это историческая проверка: 17.10.2026 данная
+правка удалена из depth-dtype.patch по запросу пользователя.
 
 Те же карта, seed, sampler, CFG, steps и метод измерения; чистый процесс
 перед каждым основным прогоном. Flow shift 3, включая Depth (отдельный граф
