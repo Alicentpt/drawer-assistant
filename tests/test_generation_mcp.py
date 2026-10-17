@@ -180,6 +180,10 @@ def test_idempotence_uncertainty(
     assert len(fake_server) == 1
     with pytest.raises(ValueError, match="different inputs"):
         invoke(settings, "anima_generate", {**request, "options": {"cfg": 8}})
+    with pytest.raises(ValueError, match="anima_batch"):
+        invoke(
+            settings, "anima_generate", {**request, "prompt": "a 4x4 grid of panels"}
+        )
 
     def lost_reply(
         url: str, payload: dict[str, object] | None = None

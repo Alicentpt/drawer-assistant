@@ -15,6 +15,7 @@ from mcp import types
 from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
 
+from .generation.presets import GenerationRequestError
 from .generation.service import invoke, schemas
 from .network import object_map
 
@@ -108,6 +109,13 @@ def create_server(settings_file: Path) -> Server[None]:
                         text="Invalid arguments; follow the published input schema.",
                     )
                 ],
+            )
+        except GenerationRequestError as exc:
+            # Only our fixed validation messages cross this boundary, not driver
+            # exceptions, private URLs, paths or arbitrary third-party messages.
+            return types.CallToolResult(
+                is_error=True,
+                content=[types.TextContent(type="text", text=str(exc))],
             )
         except (
             sqlite3.Error,

@@ -6,6 +6,7 @@ import hashlib
 import json
 from typing import TYPE_CHECKING, cast
 
+from drawer_assistant.anima_batch import multipanel
 from drawer_assistant.network import object_map
 from drawer_assistant.reference_files import EXTENSIONS, load_image
 
@@ -43,6 +44,10 @@ CONTROLS: dict[str, dict[str, object]] = {
 }
 
 
+class GenerationRequestError(ValueError):
+    """Reject generation inputs with an operator-safe, credential-free explanation."""
+
+
 def array(value: object) -> list[object]:
     """Validate JSON arrays before narrowing their element type.
 
@@ -77,6 +82,31 @@ def canonical(value: object) -> str:
     return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False)
 
 
+def scene(value: object) -> str:
+    """Require one nonempty scene and redirect numbered panels to batch.
+
+    Args:
+        value (object): Schema-validated prompt value.
+
+    Returns:
+        str: Original single-frame scene, without rewriting its content.
+
+    Raises:
+        GenerationRequestError: Prompt is empty or explicitly asks for a panel grid.
+    """
+    prompt = str(value)
+    if not prompt.strip():
+        message = "Provide a nonempty scene prompt."
+        raise GenerationRequestError(message)
+    if multipanel(prompt):
+        message = (
+            "Use anima_batch with one separate scene per frame; "
+            "do not request a numbered grid in a single generation."
+        )
+        raise GenerationRequestError(message)
+    return prompt
+
+
 def normalize(mode: str, params: dict[str, object], cache: Path) -> dict[str, object]:
     """Snapshot inputs and merge defaults before storing an immutable request.
 
@@ -93,33 +123,32 @@ def normalize(mode: str, params: dict[str, object], cache: Path) -> dict[str, ob
         KeyError: Required request fields are absent.
         OSError: Reference files cannot be read or cached.
         TypeError: Request cannot be serialized.
+        GenerationRequestError: Scene, options or reference count is invalid.
     """  # noqa: DOC503 - Delegated validation and filesystem errors propagate.
     if mode not in CONTROLS:
         message = "Select text, style, character or depth."
-        raise ValueError(message)
-    if not str(params["prompt"]).strip():
-        message = "Provide a nonempty scene prompt."
-        raise ValueError(message)
+        raise GenerationRequestError(message)
+    prompt = scene(params["prompt"])
     supplied = object_map(params.get("options", {}))
     if supplied.keys() - DEFAULTS.keys() - CONTROLS[mode].keys() - {"seed"}:
         message = "Some options do not apply to this generation mode."
-        raise ValueError(message)
+        raise GenerationRequestError(message)
     options = {**DEFAULTS, **CONTROLS[mode], **supplied}
     if int(str(options["width"])) % 64 or int(str(options["height"])) % 64:
         message = "Image dimensions must be multiples of 64."
-        raise ValueError(message)
+        raise GenerationRequestError(message)
     if float(str(options.get("start_percent", 0))) >= float(
         str(options.get("end_percent", 1))
     ):
         message = "Require start_percent < end_percent."
-        raise ValueError(message)
+        raise GenerationRequestError(message)
     refs: list[str] = []
     raw_refs = array(params.get("references", []))
     for source in raw_refs:
         image = load_image({"file": str(source)})
         if image is None:
             message = "Reference file is required."
-            raise ValueError(message)
+            raise GenerationRequestError(message)
         _, mime, content = image
         cache.mkdir(parents=True, exist_ok=True)
         target = cache / (hashlib.sha256(content).hexdigest() + EXTENSIONS[mime])
@@ -131,10 +160,10 @@ def normalize(mode: str, params: dict[str, object], cache: Path) -> dict[str, ob
         message = (
             "text takes no references; character takes 1..3, other modes exactly 1."
         )
-        raise ValueError(message)
+        raise GenerationRequestError(message)
     return {
         "mode": mode,
-        "prompt": params["prompt"],
+        "prompt": prompt,
         "options": options,
         "references": refs,
     }
