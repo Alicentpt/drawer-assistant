@@ -95,6 +95,7 @@ def install_files(profile: Path, env_file: Path) -> None:
                 "imagemagick_binary": magick_path(
                     settings.get("IMAGEMAGICK_BINARY") or ""
                 ),
+                "generation_mcp": True,
             }
         ),
         encoding="utf-8",
@@ -113,6 +114,50 @@ def install_files(profile: Path, env_file: Path) -> None:
         encoding="utf-8",
     )
     configure_toolset(profile, timezone)
+    configure_generation_mcp(profile)
+
+
+def configure_generation_mcp(profile: Path) -> None:
+    """Connect the profile to its local stdio generation server.
+
+    Args:
+        profile (Path): Selected existing Hermes profile directory.
+
+    Returns:
+        None: The generation MCP is enabled for Telegram and ordinary CLI only;
+            read-only cron tools stay unchanged. Other MCP servers are preserved.
+
+    Raises:
+        OSError: Profile YAML cannot be read or written.
+        ValueError: Existing configuration mappings are malformed.
+        yaml.YAMLError: YAML is invalid.
+        TypeError: Telegram toolset selection is not a list.
+    """  # noqa: DOC503 - File and configuration errors propagate.
+    file = profile / "config.yaml"
+    config = object_map(yaml.safe_load(file.read_text("utf-8")))
+    object_map(config.setdefault("mcp_servers", {}))["drawer_generation"] = {
+        "command": os.environ.get("DRAWER_GENERATION_PYTHON") or sys.executable,
+        "args": [
+            "-I",
+            "-m",
+            "drawer_assistant.mcp_generation",
+            "--settings",
+            str((profile / "plugins/drawer/settings.json").resolve()),
+        ],
+        "timeout": 120,
+    }
+    # Platform selection uses the MCP server name; runtime registry adds mcp-.
+    platforms = object_map(config["platform_toolsets"])
+    selected = platforms.get("telegram")
+    if not isinstance(selected, list):
+        message = "Telegram toolsets must be a list."
+        raise TypeError(message)
+    if "drawer_generation" not in selected:
+        # The container shape is validated above; preserve other selected names.
+        cast("list[object]", selected).append("drawer_generation")
+    temporary = file.with_suffix(".mcp.tmp")
+    temporary.write_text(yaml.safe_dump(config, allow_unicode=True), "utf-8")
+    temporary.replace(file)
 
 
 def install_context(profile: Path, source: Path) -> None:
@@ -212,7 +257,10 @@ def configure_cron_tools(config: dict[str, object]) -> None:
     Raises:
         ValueError: Toolset configuration mappings or the known list are malformed.
     """  # noqa: DOC503 - object_map validates native configuration mappings.
-    object_map(config.setdefault("platform_toolsets", {}))["cron"] = ["drawer_read"]
+    object_map(config.setdefault("platform_toolsets", {}))["cron"] = [
+        "drawer_read",
+        "no_mcp",
+    ]
     # Hermes auto-enables newly discovered plugin toolsets unless marked known.
     known = object_map(config.setdefault("known_plugin_toolsets", {}))
     cron_known = known.setdefault("cron", [])

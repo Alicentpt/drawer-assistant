@@ -37,6 +37,15 @@ Compose запускает контейнер автоматически пос�
 
 ## Генерация
 
+Генерация подключена как `drawer_generation` MCP через stdio. Отдельные tools:
+Text, Style, Character, Depth, Batch, Status, Image Sheet и Health.
+Старые native генераторы отключены. Где читать и менять всё:
+[GENERATION-MCP.md](../docs/GENERATION-MCP.md).
+
+MCP использует `/opt/drawer-mcp/bin/python` и собственные pinned dependencies;
+код Hermes и его окружение остаются отдельно. Cron имеет `no_mcp`, поэтому
+генераторы не добавляются автоматически к ежедневной сводке.
+
 EC2 подключён к Tailscale как `ec2-jessica`; контейнер использует DNS Tailscale
 и исходящие маршруты хоста. Docker bridge отделяет его порты от другого Hermes,
 который уже работает на сервере. Порты контейнера в интернет не публикуются.

@@ -15,6 +15,7 @@ from .schema import (
     ALIBABA_SCHEMA,
     ASSETS_SCHEMA,
     BATCH_SCHEMA,
+    GENERATION_SCHEMA,
     REFERENCE_FILES_SCHEMA,
     SCHEMA,
 )
@@ -84,10 +85,13 @@ def connect_sqlite(path: Path) -> sqlite3.Connection:
             if version in (0, 1, 2, 3, 4, 5):
                 database.execute(BATCH_SCHEMA)
                 database.execute("PRAGMA user_version = 6")
+            if version in (0, 1, 2, 3, 4, 5, 6):
+                database.execute(GENERATION_SCHEMA)
+                database.execute("PRAGMA user_version = 7")
     except sqlite3.Error, ValueError:
         database.close()
         raise
-    if version not in (0, 1, 2, 3, 4, 5, 6):
+    if version not in (0, 1, 2, 3, 4, 5, 6, 7):
         database.close()
         message = "Unsupported database version; update Drawer Assistant."
         raise ValueError(message)

@@ -4,10 +4,15 @@ USER root
 WORKDIR /opt/drawer-app
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
+COPY deployment/mcp-requirements.txt ./mcp-requirements.txt
 RUN /opt/hermes/.venv/bin/python -m ensurepip \
     && /opt/hermes/.venv/bin/python -m pip install --no-cache-dir --no-deps \
     --target /opt/drawer-python \
     psycopg==3.3.6 psycopg-binary==3.3.6 tzdata==2025.3 PyYAML==6.0.3 .
+RUN /opt/hermes/.venv/bin/python -m venv /opt/drawer-mcp \
+    && /opt/drawer-mcp/bin/python -m pip install --no-cache-dir --require-hashes \
+    -r mcp-requirements.txt \
+    && /opt/drawer-mcp/bin/python -m pip install --no-cache-dir --no-deps .
 
 FROM nousresearch/hermes-agent@sha256:a11574b7fe8e1631d7d88d556677dac693bc058abf558cdeb899155688c1bf05
 USER root
@@ -18,13 +23,17 @@ RUN curl --fail --silent --show-error --location \
     https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
     --output /etc/ssl/certs/rds-global-bundle.pem
 COPY --from=plugin-build /opt/drawer-python /opt/drawer-python
+COPY --from=plugin-build /opt/drawer-mcp /opt/drawer-mcp
 # Hermes narrows PYTHONPATH for tool subprocesses; .pth also covers those workers.
 RUN printf '%s\n' /opt/drawer-python \
     > /opt/hermes/.venv/lib/python3.14/site-packages/drawer.pth
 ENV PYTHONPATH=/opt/drawer-python:/opt/hermes
 ENV PATH=/opt/drawer-python/bin:${PATH}
+ENV DRAWER_GENERATION_PYTHON=/opt/drawer-mcp/bin/python
 RUN /opt/hermes/.venv/bin/python -I -c \
     "import sys,psycopg,drawer_assistant; assert sys.version_info[:2] == (3,14)" \
+    && /opt/drawer-mcp/bin/python -I -c \
+    "from importlib.metadata import version; from drawer_assistant.mcp_generation import create_server; assert version('mcp') == '2.2.0'" \
     && /opt/hermes/.venv/bin/python -c \
     "from pathlib import Path; from drawer_assistant.hermes_compat import patch_telegram; patch_telegram(Path('/opt/hermes'))" \
     && magick -version

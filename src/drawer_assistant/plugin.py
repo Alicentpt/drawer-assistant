@@ -283,7 +283,17 @@ def register(ctx: PluginContext) -> None:
     """  # noqa: DOC502 - Packaged data and external host failures propagate.
     directory = Path(__file__).parent
     schemas = object_map(json.loads((directory / "tools.json").read_text("utf-8")))
+    settings_file = directory / "settings.json"
+    mcp = (
+        settings_file.exists()
+        and object_map(json.loads(settings_file.read_text("utf-8"))).get(
+            "generation_mcp"
+        )
+        is True
+    )
     for tool, value in schemas.items():
+        if mcp and tool in {"drawer_anima", "drawer_anima_batch", "drawer_image_sheet"}:
+            continue
         ctx.register_tool(
             name=tool,
             toolset="drawer_read"

@@ -4,7 +4,7 @@ services:
     build:
       context: ..
       dockerfile: deployment/Dockerfile
-    image: drawer-hermes:postgres
+    image: drawer-hermes:anima-mcp
     restart: unless-stopped
     # Outbound connections use host routes; isolate ports from other host agents.
     dns:

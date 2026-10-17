@@ -68,7 +68,7 @@ def object_map(value: object) -> dict[str, object]:
 
 def request(
     url: str,
-    payload: dict[str, object] | None = None,
+    payload: dict[str, object] | bytes | None = None,
     *,
     headers: dict[str, str] | None = None,
 ) -> bytes:
@@ -78,7 +78,8 @@ def request(
 
     Args:
         url (str): HTTP(S) URL supplied by configuration or a fixed API route.
-        payload (dict[str, object] | None, default=None): JSON POST body; None uses GET.
+        payload (dict[str, object] | bytes | None, default=None): JSON or raw POST
+            body; None uses GET. Raw uploads must provide their content type.
         headers (dict[str, str] | None, default=None): Additional headers; redirects
             are disabled whenever supplied, to avoid forwarding credentials.
 
@@ -94,7 +95,13 @@ def request(
     if address.scheme not in {"http", "https"}:
         message = "Only HTTP(S) API endpoints are supported."
         raise ValueError(message)
-    body = None if payload is None else json.dumps(payload).encode()
+    body = (
+        payload
+        if isinstance(payload, bytes)
+        else None
+        if payload is None
+        else json.dumps(payload).encode()
+    )
     try:
         # URL schemes are restricted above; endpoints come from operator config.
         http_request = Request(  # noqa: S310

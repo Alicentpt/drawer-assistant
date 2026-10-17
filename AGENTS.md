@@ -9,7 +9,10 @@
   явная модель без ключа вызывает ошибку до записи конфигурации.
 - Каждая модель генерации — отдельный tool с фиксированной моделью. Общие HTTP,
   валидация и хранение переиспользуются; будущий MCP оборачивает те же функции.
-- В действующем профиле включена только drawer_anima. Z-Image, Flux, Alibaba
+- В действующем профиле генерация — MCP drawer_generation (stdio) только Nova.
+  Text, Style, Character и Depth — отдельные tools, без All In One/Pose.
+  Старые native drawer_anima/batch/sheet отключены при generation_mcp=true.
+  Z-Image, Flux, Alibaba
   и штатный ChatGPT image_gen отключены в схемах, регистрации и toolsets.
   Старые workflow и задания сохраняем для истории, но агент их не запускает.
 - Пользовательские данные, секреты, OAuth, БД, изображения и веса не коммитим.
@@ -102,8 +105,11 @@
   timezone и notes. Europe/Moscow выбран явно, не «чинить» его по старым заметкам.
 - ComfyUI доступен по HTTP(S); локальные Windows-пути серверу не передаём.
 - Workflow в формате API и версии моделей/nodes фиксируем; веса храним отдельно.
-- Anima добавляет согласованный quality/scenery prefix один раз и фиксированный
-  negative; тело сцены сохраняем. Другие генераторы этот пресет не наследуют.
+- MCP Anima добавляет согласованный quality/painting/scenery prefix один раз.
+  Positive prefix и negative — defaults с явной заменой через options, включая
+  пустую строку. Конфликт со стилем агент разрешает до вызова, сохраняя замысел.
+  Все refs сначала ImageScale stretch до размера генерации без crop/padding.
+  Defaults: 512x512, CFG7, 45 steps, res_multistep/simple, denoise1.
   Инструкция Hermes — `src/drawer_assistant/skills/drawer-anima/SKILL.md`;
   endpoint Anima можно задать
   отдельно через `COMFYUI_ANIMA_BASE_URL`, с fallback на общий адрес.
@@ -116,8 +122,13 @@
   Anima оставляем пустым, чтобы не перекрыть общий адрес устаревшим облачным.
   Проверяем реальный system_stats, GPU-only и наличие весов до живого теста.
 - Мок проверяет протокол и ошибки, но не качество, скорость или VRAM.
-- Экспериментальные Anima controls лежат в experiments/anima-controls, отдельно
-  от рабочих workflow. Подключаем инструменты после проверки графов на GPU.
+- Исторические Anima controls — experiments/anima-controls. MCP workflow —
+  generation/workflows; успешный запуск каждого режима на целевом GPU отмечаем
+  отдельно. Missing dependencies никогда не выдаём за успешную генерацию.
+  Depth возвращает именно карту входа ControlNet + start/end окно. Окно задаёт
+  этапы denoising, не фильтрует карту. Не рисуем вымышленный изменённый preview.
+  Batch хранит defaults и независимые options/refs каждого кадра, исполняется
+  последовательно, переживает перезапуск и не повторяет неопределённый POST.
   Проверяем GPU-only также в сторонних нодах: флаг ComfyUI не запрещает им
   самостоятельно отправлять SigLIP/ONNX на CPU. Версии и патчи фиксируем явно.
 - Anima status ждёт результат до 25 секунд с паузой 5 секунд между проверками;

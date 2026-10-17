@@ -4,5 +4,7 @@
 !README.md
 !src/
 !src/**
+!deployment/
+!deployment/mcp-requirements.txt
 **/__pycache__/
 **/*.pyc

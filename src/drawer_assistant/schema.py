@@ -51,6 +51,14 @@ CREATE TABLE IF NOT EXISTS image_batches (
 )
 """
 
+GENERATION_SCHEMA = """
+CREATE TABLE IF NOT EXISTS generation_tasks (
+ id TEXT PRIMARY KEY, spec TEXT NOT NULL, base TEXT NOT NULL,
+ state TEXT NOT NULL DEFAULT 'submitting', prompt_id TEXT NOT NULL DEFAULT '',
+ result TEXT NOT NULL DEFAULT '{}'
+)
+"""
+
 STAGE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS order_stages (
  order_id TEXT NOT NULL REFERENCES orders(id), id TEXT NOT NULL,

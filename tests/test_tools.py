@@ -299,6 +299,7 @@ def test_install_preserves_data(tmp_path: Path) -> None:
         for path in (tmp_path / "plugins/drawer/skills").glob("*/SKILL.md")
     ) == [
         "drawer-anima",
+        "drawer-anima-controls",
         "drawer-images",
         "drawer-order-review",
         "drawer-orders",
@@ -340,9 +341,13 @@ def test_install_preserves_data(tmp_path: Path) -> None:
         "memory",
         "file",
         "skills",
+        "drawer_generation",
     ]
     assert object_map(configuration["terminal"])["cwd"] == str(tmp_path.resolve())
-    assert object_map(configuration["platform_toolsets"])["cron"] == ["drawer_read"]
+    assert object_map(configuration["platform_toolsets"])["cron"] == [
+        "drawer_read",
+        "no_mcp",
+    ]
     assert object_map(configuration["known_plugin_toolsets"])["cron"] == [
         "drawer",
         "drawer_read",

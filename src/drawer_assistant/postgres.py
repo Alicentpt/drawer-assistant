@@ -13,6 +13,7 @@ from .schema import (
     ALIBABA_SCHEMA,
     ASSETS_SCHEMA,
     BATCH_SCHEMA,
+    GENERATION_SCHEMA,
     REFERENCE_FILES_SCHEMA,
     SCHEMA,
     STAGE_SCHEMA,
@@ -25,7 +26,8 @@ if TYPE_CHECKING:
 
 # One database-scoped transaction lock preserves SQLite's serialized writers.
 WRITE_LOCK = 741938021
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
+PRE_GENERATION_VERSION = 6
 
 
 @contextmanager
@@ -165,7 +167,7 @@ def initialize(database: Postgres) -> None:
         database (Postgres): Open connection owned and closed by the caller.
 
     Returns:
-        None: Version six exists and no stored order or delivery state is rewritten.
+        None: Version seven exists; existing orders and delivery state are preserved.
 
     Raises:
         RuntimeError: Schema statements or transaction completion fail.
@@ -182,6 +184,10 @@ def initialize(database: Postgres) -> None:
             "SELECT version FROM drawer_schema WHERE singleton=1"
         ).fetchone()
         if row is not None:
+            if row["version"] == PRE_GENERATION_VERSION:
+                database.execute(GENERATION_SCHEMA)
+                database.execute("UPDATE drawer_schema SET version=7 WHERE singleton=1")
+                return
             if row["version"] != SCHEMA_VERSION:
                 message = "Unsupported PostgreSQL schema; update Drawer Assistant."
                 raise ValueError(message)
@@ -202,6 +208,7 @@ def initialize(database: Postgres) -> None:
                 "REFERENCES order_stages(order_id,id) DEFERRABLE INITIALLY DEFERRED",
             ),
             BATCH_SCHEMA,
+            GENERATION_SCHEMA,
         )
         for declaration in declarations:
             for statement in declaration.split(";"):

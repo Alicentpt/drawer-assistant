@@ -292,7 +292,7 @@ def test_migration_and_fixed_gpu_tools(
             database.execute("SELECT prompt FROM jobs WHERE id='kept'").fetchone()[0]
             == "pose"
         )
-        version = 6
+        version = 7
         assert database.execute("PRAGMA user_version").fetchone()[0] == version
         assert database.execute("SELECT * FROM alibaba_jobs").fetchall() == []
     submit = Mock(return_value={"state": "queued"})

@@ -443,3 +443,9 @@ uv run poe audit
 API. Также проверяем Ruff, типизацию и документацию;
 GitHub Actions повторяет их на Windows/Linux. Правила — [AGENTS.md](AGENTS.md),
 этапы — [ARCHITECTURE.md](ARCHITECTURE.md). Коммиты только в ветках, через PR.
+# Генерация через MCP
+
+Схемы инструментов, workflow, настройки и все скиллы:
+[карта файлов и инструкция](docs/GENERATION-MCP.md).
+Nova Text / Style / Character / Depth, batch с параметрами каждого кадра,
+точная карта глубины и сборка коллажей. MCP подключается к Hermes через stdio.

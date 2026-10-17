@@ -15,6 +15,7 @@ import pytest
 from psycopg import sql
 
 from drawer_assistant.database import Database, configured_database
+from drawer_assistant.generation import jobs
 from drawer_assistant.migration import snapshot, transfer
 from drawer_assistant.order_views import order_info
 from drawer_assistant.references import references
@@ -176,7 +177,7 @@ def test_profile_database_isolation(tmp_path: Path) -> None:
 
 
 def test_snapshot_copy_integrity(tmp_path: Path, postgres_database: Database) -> None:
-    """Round-trip all nine tables, nested links, Unicode, bytea and delivery state.
+    """Round-trip all tables, nested links, Unicode, bytea and delivery state.
 
     Args:
         tmp_path (Path): SQLite source, snapshot and binary export directory.
@@ -213,6 +214,39 @@ def test_snapshot_copy_integrity(tmp_path: Path, postgres_database: Database) ->
     assert orders(postgres_database, {"action": "list"})[0]["priority"] == "1"
     with pytest.raises(FileExistsError):
         snapshot(source, backup)
+
+
+def test_generation_upgrade(postgres_database: Database) -> None:
+    """Upgrade a simulated version-six schema without changing existing orders.
+
+    Args:
+        postgres_database (Database): Disposable uniquely named PostgreSQL schema.
+
+    Returns:
+        None: Version-seven task writes work and old order data remains intact.
+
+    Raises:
+        AssertionError: Migration changes stored orders or task persistence fails.
+        ValueError: Fixture, database schema or task specification is invalid.
+        OSError: Cache anchor cannot be accessed.
+        RuntimeError: Disposable PostgreSQL operations fail.
+        KeyError: Required fixture data is missing.
+        TypeError: Fixture task cannot be serialized.
+        OverflowError: Fixture date normalization fails.
+        sqlite3.Error: SQLite compatibility operations fail.
+    """  # noqa: DOC502 - Full storage and migration operations are exercised.
+    orders(
+        postgres_database, {"action": "create", "id": "retained", "title": "Keep this"}
+    )
+    before = orders(postgres_database, {"action": "list"})
+    with transaction(postgres_database) as database:
+        database.execute("DROP TABLE generation_tasks")
+        database.execute("UPDATE drawer_schema SET version=6 WHERE singleton=1")
+    assert jobs.reserve(
+        postgres_database, "http://localhost:8188", "new", {"mode": "text"}
+    )
+    assert jobs.read(postgres_database, "new")["state"] == "submitting"
+    assert orders(postgres_database, {"action": "list"}) == before
 
 
 def test_postgres_rollback_and_reminder_lock(postgres_database: Database) -> None:
