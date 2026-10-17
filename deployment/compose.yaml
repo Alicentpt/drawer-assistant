@@ -1,0 +1,26 @@
+name: drawer-assistant
+services:
+  hermes:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    image: drawer-hermes:anima-mcp
+    restart: unless-stopped
+    # Outbound connections use host routes; isolate ports from other host agents.
+    dns:
+      - 100.100.100.100
+    volumes:
+      - ./state/hermes:/opt/data
+    environment:
+      HERMES_UID: "${HERMES_UID:-1000}"
+      HERMES_GID: "${HERMES_GID:-1000}"
+      HERMES_DASHBOARD: "0"
+      TZ: Europe/Moscow
+    command: ["--profile", "default", "gateway", "run"]
+    stop_grace_period: 60s
+    mem_limit: "${HERMES_MEMORY_LIMIT:-768m}"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

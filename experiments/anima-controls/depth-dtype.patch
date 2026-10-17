@@ -1,0 +1,29 @@
+diff --git a/adv_control/control_anima_vace.py b/adv_control/control_anima_vace.py
+index 9c857b8..9f2f1fd 100644
+--- a/adv_control/control_anima_vace.py
++++ b/adv_control/control_anima_vace.py
+@@ -429,7 +429,12 @@ class AnimaVACEAdvanced(ControlNetAdvanced):
+                     hint = hints.get(bi)
+                     if hint is None:
+                         return output
+-                    return output + hint.to(dtype=output.dtype)
++                    hint = hint.to(device=output.device, dtype=output.dtype)
++                    # InContext appends clean reference frames. Apply depth only
++                    # to the generated frame instead of broadcasting into refs.
++                    if output.shape[1] > hint.shape[1] and hint.shape[1] == 1:
++                        return torch.cat((output[:, :1] + hint, output[:, 1:]), dim=1)
++                    return output + hint
+                 return hook
+ 
+             handle = block.register_forward_hook(make_hook(base_idx), with_kwargs=True)
+@@ -512,7 +517,9 @@ class AnimaVACEAdvanced(ControlNetAdvanced):
+                 self.cond_hint.to(device=x_noisy.device, dtype=dtype), patch_size
+             )
+ 
+-            x_B_T_H_W_D, rope_emb, extra_pos_emb = dit.prepare_embedded_sequence(x_5d)
++            x_B_T_H_W_D, rope_emb, extra_pos_emb = dit.prepare_embedded_sequence(
++                x_5d.to(dtype=dtype)
++            )
+ 
+             timestep = self.model_sampling_current.timestep(t)
+             if timestep.ndim == 1:
