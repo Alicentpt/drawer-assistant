@@ -1,6 +1,34 @@
 # Проверка MCP генерации — 17.10.2026
 
-## Текущее изменение — 18.10.2026
+## Автодоставка — 18.10.2026
+
+EC2 обновлён до `19dfef8`: отдельный Compose worker без LLM продолжает Text,
+Style, Depth и batch. Native pre_tool_call фиксирует доверенный Telegram origin;
+штатная очередь Hermes доставляет MEDIA и зеркалит сообщение в историю.
+Старые задания без маршрута не рассылались, Telegram-тестов не отправляли.
+
+Подтверждено:
+
+- `poe check`: 140 passed, 4 live PostgreSQL skipped; audit без уязвимостей.
+- Отдельный PostgreSQL 17: 5 passed, включая переход 6/7 → 8, бинарники,
+  snapshot/transfer и конкурентные leases с восстановлением после истечения.
+- В настоящем Hermes изолированный native hook → worker → native queue →
+  тестовый sink: PNG распознан как MEDIA, маршрут правильный, одна доставка.
+- Unit: batch продолжается без status; depth возвращает результат и карту;
+  обрыв чтения даёт backoff; uncertain POST/unknown delivery не повторяются.
+- Рабочий профиль обнаруживает новый native hook. Gateway Telegram connected;
+  gateway и worker running, restarts=0, OOM=false; другой Hermes хоста active.
+- Настоящий stdio MCP: семь tools; automatic_delivery/worker_running=true,
+  GPU-only=true, все три режима ready, missing=[].
+- RDS схема 8; все прежние строки и BLOB сверены с согласованным backup.
+  SOUL, config.yaml, .env и cron/jobs.json сохранены побайтно.
+
+До переключения сохранены профиль, старый образ, Compose и согласованный
+экспорт RDS в приватных `drawer-auto-delivery-20261018` / `auto-delivery-backups`.
+Это проверка интеграции без реальной тестовой отправки Telegram; первую
+пользовательскую генерацию с новым маршрутом надо подтвердить в рабочем чате.
+
+## Предыдущее изменение — 18.10.2026
 
 Character/InContext удалён по запросу пользователя: tool, batch enum, defaults,
 сборка графа, packaged workflow, manifest, скиллы и установщик. Остались семь tools
