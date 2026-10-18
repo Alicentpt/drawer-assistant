@@ -46,7 +46,7 @@ def create_server(settings_file: Path) -> Server[None]:
         settings_file (Path): Selected profile's plugin settings file.
 
     Returns:
-        Server[None]: MCP server with eight explicit, validated tools.
+        Server[None]: MCP server with seven explicit, validated tools.
     """
     execution_lock = asyncio.Lock()
 

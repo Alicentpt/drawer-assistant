@@ -13,7 +13,7 @@ from drawer_assistant.store import row_values, transaction
 
 from .graphs import build
 from .health import inspect_server
-from .presets import array, canonical
+from .presets import CONTROLS, GenerationRequestError, array, canonical
 from .transport import download, upload
 
 if TYPE_CHECKING:
@@ -136,6 +136,7 @@ def submit(
         KeyError: Required data or acknowledgement is missing.
         OSError: Image or workflow files cannot be read.
         RuntimeError: Server is unavailable/not ready or database operation fails.
+        GenerationRequestError: A removed mode attempts to submit new work.
         TypeError: Graph cannot be serialized.
         sqlite3.Error: SQLite operations fail.
     """  # noqa: DOC503 - Delegated transport, storage and graph failures propagate.
@@ -147,6 +148,9 @@ def submit(
     if existing is not None:
         reserve(path, base, identifier, spec)
         return public(existing)
+    if spec["mode"] not in CONTROLS:
+        message = "This generation mode was removed; select text, style or depth."
+        raise GenerationRequestError(message)
     readiness = object_map(object_map(inspect_server(base)["modes"])[str(spec["mode"])])
     if not readiness["ready"]:
         message = (

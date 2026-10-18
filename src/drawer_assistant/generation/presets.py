@@ -39,7 +39,6 @@ DEFAULTS: dict[str, object] = {
 CONTROLS: dict[str, dict[str, object]] = {
     "text": {},
     "style": {"strength": 0.65},
-    "character": {"strength": 1.3, "start_percent": 0.0, "end_percent": 1.0},
     "depth": {"strength": 1.0, "start_percent": 0.0, "end_percent": 0.6},
 }
 
@@ -111,7 +110,7 @@ def normalize(mode: str, params: dict[str, object], cache: Path) -> dict[str, ob
     """Snapshot inputs and merge defaults before storing an immutable request.
 
     Args:
-        mode (str): Allowlisted text, style, character or depth mode.
+        mode (str): Allowlisted text, style or depth mode.
         params (dict[str, object]): Schema-validated prompt, options and references.
         cache (Path): Persistent input cache outside the source checkout.
 
@@ -126,7 +125,7 @@ def normalize(mode: str, params: dict[str, object], cache: Path) -> dict[str, ob
         GenerationRequestError: Scene, options or reference count is invalid.
     """  # noqa: DOC503 - Delegated validation and filesystem errors propagate.
     if mode not in CONTROLS:
-        message = "Select text, style, character or depth."
+        message = "Select text, style or depth."
         raise GenerationRequestError(message)
     prompt = scene(params["prompt"])
     supplied = object_map(params.get("options", {}))
@@ -155,11 +154,8 @@ def normalize(mode: str, params: dict[str, object], cache: Path) -> dict[str, ob
         if not target.exists():
             target.write_bytes(content)
         refs.append(str(target.resolve()))
-    maximum = 3 if mode == "character" else 1
-    if (mode == "text" and refs) or (mode != "text" and not 1 <= len(refs) <= maximum):
-        message = (
-            "text takes no references; character takes 1..3, other modes exactly 1."
-        )
+    if (mode == "text" and refs) or (mode != "text" and len(refs) != 1):
+        message = "text takes no references; style and depth take exactly one."
         raise GenerationRequestError(message)
     return {
         "mode": mode,

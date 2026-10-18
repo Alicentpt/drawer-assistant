@@ -447,5 +447,5 @@ GitHub Actions повторяет их на Windows/Linux. Правила — [A
 
 Схемы инструментов, workflow, настройки и все скиллы:
 [карта файлов и инструкция](docs/GENERATION-MCP.md).
-Nova Text / Style / Character / Depth, batch с параметрами каждого кадра,
+Nova Text / Style / Depth, batch с параметрами каждого кадра,
 точная карта глубины и сборка коллажей. MCP подключается к Hermes через stdio.

@@ -111,37 +111,6 @@ def build(spec: dict[str, object], names: list[str], seed: int) -> dict[str, obj
             strength=settings["strength"],
             ip_cfg_scale=settings["cfg"],
         )
-    if mode == "character":
-        latent: list[object] = ["12", 0]
-        for index in range(len(names)):
-            identifier = "12" if index == 0 else str(102 + index * 3)
-            graph[identifier] = node(
-                "AnimaRefEncode",
-                {
-                    "vae": ["3", 0],
-                    "image": [str(101 + index * 3), 0],
-                    "target_width": settings["width"],
-                    "target_height": settings["height"],
-                },
-            )
-            if index:
-                combined = str(200 + index)
-                graph[combined] = node(
-                    "AnimaRefLatentBatch",
-                    {
-                        "ref_latent_1": latent,
-                        "ref_latent_2": [identifier, 0],
-                        "fit_mode": "stretch",
-                    },
-                )
-                latent = [combined, 0]
-        inputs(graph, "13").update(
-            ref_latent=latent,
-            fit_mode="stretch",
-            strength=settings["strength"],
-            start_percent=settings["start_percent"],
-            end_percent=settings["end_percent"],
-        )
     if mode == "depth":
         inputs(graph, "11")["image"] = ["101", 0]
         inputs(graph, "13").update(

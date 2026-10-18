@@ -1,6 +1,6 @@
 ---
 name: drawer-anima-controls
-description: "Nova Style, Character и Depth: референсы, силы, окна влияния и предпросмотр карты."
+description: "Nova Style и Depth: референсы, силы, окна влияния и предпросмотр карты."
 ---
 
 # Референсы Nova
@@ -20,18 +20,6 @@ ImageScale до разрешения генерации: по умолчанию
 ref_image_size=512, siglip_layer=-1, gray_null=false, use_lora=true.
 ip_cfg_separate=false: влияние связано с общим CFG; ip_cfg_scale следует cfg.
 Не обещай чистого отделения манеры от содержания/внешности картинки.
-
-## Character — anima_character
-
-1–3 отдельных refs, каждый скейлится отдельно. Можно полный рост + лицо.
-strength=1.3; пробные точки 1.2, 1.3, 1.5, 1.6, 1.8, 2.
-Выше может усиливаться влияние персонажа, ближе к 1 — заимствование стиля.
-Проверяй глазами; бесконечное повышение не гарантирует узнаваемое лицо.
-Добавляй в prompt описание внешности, волос, глаз, одежды и узнаваемых деталей,
-согласованное с референсом. Не полагайся на имя или картинку в одиночку.
-start_percent=0, end_percent=1, cond_only=true, ref_timestep=0.
-Основной регулятор — strength InContext Apply; LoRA strength_model=1.
-Несколько refs увеличивают VRAM, никакого CPU fallback.
 
 ## Depth — anima_depth
 
@@ -59,5 +47,4 @@ end ближе к 1 дольше навязывает детали. Меняй �
 молча и не устанавливай ноды из Telegram.
 
 Источники: [Style](https://github.com/LuciferTC9527/ComfyUI-Anima_IP-Adapter),
-[Character](https://huggingface.co/darask0/Anima-InContext-Character),
 [Depth](https://huggingface.co/TaihoC/Anima-ControlNet-VACE-Depth).

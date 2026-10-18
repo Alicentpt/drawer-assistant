@@ -5,7 +5,6 @@ param(
     [string]$ComfyRoot,
     [string]$Python,
     [string]$ModelsRoot,
-    [string]$CharacterSource,
     [switch]$DependenciesOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -147,7 +146,13 @@ if (-not $Python) {
         throw "ComfyUI Python not found: $Python. Select the ComfyUI data folder containing .venv; no global Python is used."
     }
 }
-if (-not $ModelsRoot) { $ModelsRoot = Join-Path $ComfyRoot 'models' }
+if (-not $ModelsRoot) {
+    $ModelsRoot = Join-Path $ComfyRoot 'models'
+    $sharedModels = Join-Path $env:LOCALAPPDATA 'Comfy-Desktop\ComfyUI-Shared\models'
+    $StyleModelsRoot = if (Test-Path -LiteralPath $sharedModels) { $sharedModels } else { $ModelsRoot }
+} else {
+    $StyleModelsRoot = $ModelsRoot
+}
 if (Get-Process -Name 'ComfyUI', 'Comfy Desktop' -ErrorAction SilentlyContinue) {
     throw 'Close ComfyUI Desktop before running the installer.'
 }
@@ -194,17 +199,26 @@ if ($DependenciesOnly) {
 }
 Get-Command git, curl.exe -ErrorAction Stop | Out-Null
 
-Write-Host '1/3 STYLE: nodes, compatibility patch, weights and SigLIP2'
+Write-Host '1/2 STYLE: nodes, compatibility patch, weights and SigLIP2'
 $style = Install-Repository 'ComfyUI-Anima_IP-Adapter' 'https://github.com/LuciferTC9527/ComfyUI-Anima_IP-Adapter' $pins.style.revision
 Apply-Patch $style 'style-compat.patch' 'nodes.py' $pins.style.patch_source_sha256 $pins.style.previous_patch_sha256 $pins.style.patched_sha256
-Download-File "https://huggingface.co/LuciferTC/Anima-IP-Adapter/resolve/$($pins.style_weights.revision)/ip_adapter-Character_Reference-10.safetensors" (Join-Path $ModelsRoot 'ipadapter\ip_adapter-Character_Reference-10.safetensors') 'dc9612cc28b55f00ba39f6169bfe4871130be028a55682ab54dd51360acb8232'
+$styleFile = 'ipadapter\ip_adapter-Character_Reference-10.safetensors'
+$existingStyle = Join-Path $ModelsRoot $styleFile
+$targetStyle = Join-Path $StyleModelsRoot $styleFile
+if ($existingStyle -ne $targetStyle -and -not (Test-Path -LiteralPath $targetStyle) -and
+    (Test-Path -LiteralPath $existingStyle) -and
+    (Get-FileHash -LiteralPath $existingStyle -Algorithm SHA256).Hash -eq 'dc9612cc28b55f00ba39f6169bfe4871130be028a55682ab54dd51360acb8232') {
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $targetStyle) | Out-Null
+    Copy-Item -LiteralPath $existingStyle -Destination $targetStyle
+}
+Download-File "https://huggingface.co/LuciferTC/Anima-IP-Adapter/resolve/$($pins.style_weights.revision)/ip_adapter-Character_Reference-10.safetensors" (Join-Path $StyleModelsRoot 'ipadapter\ip_adapter-Character_Reference-10.safetensors') 'dc9612cc28b55f00ba39f6169bfe4871130be028a55682ab54dd51360acb8232'
 $siglip = Join-Path $ModelsRoot 'siglip2\siglip2-base-patch16-512'
 foreach ($name in @('config.json', 'model.safetensors', 'preprocessor_config.json', 'special_tokens_map.json', 'tokenizer.json', 'tokenizer.model', 'tokenizer_config.json')) {
     $sha = if ($name -eq 'model.safetensors') { 'fe0e601c625e69eed8e73500d39e9b6164403fe03db8048e87913c3cefbbb3fe' } else { '' }
     Download-File "https://huggingface.co/google/siglip2-base-patch16-512/resolve/$($pins.siglip.revision)/$name" (Join-Path $siglip $name) $sha
 }
 
-Write-Host '2/3 DEPTH: ControlNet, preprocessor and weights'
+Write-Host '2/2 DEPTH: ControlNet, preprocessor and weights'
 $conflicts = Get-ChildItem -LiteralPath (Join-Path $ComfyRoot 'custom_nodes') -Directory | Where-Object { $_.Name -match 'advanced.?controlnet' -and $_.Name -ne 'ComfyUI-Advanced-ControlNet' }
 if ($conflicts) { throw 'Another Advanced ControlNet folder exists. Disable it before installing this fork.' }
 $depth = Install-Repository 'ComfyUI-Advanced-ControlNet' 'https://github.com/PineCookie/ComfyUI-Advanced-ControlNet' $pins.depth.revision
@@ -217,45 +231,6 @@ if (-not (Test-Path -LiteralPath $aux)) {
 Download-File "https://huggingface.co/TaihoC/Anima-ControlNet-VACE-Depth/resolve/$($pins.depth_weights.revision)/anima-vace-depth.safetensors" (Join-Path $ModelsRoot 'controlnet\anima-vace-depth.safetensors') '29762e7037bd74b70abaa832c79d10159d5e7e0612045961318e304eb50e802d'
 Download-File 'https://huggingface.co/depth-anything/Depth-Anything-V2-Small/resolve/03876f8651c73a60fe4c2c48294e09fcb6838fcf/depth_anything_v2_vits.pth' (Join-Path $aux 'ckpts\depth-anything\Depth-Anything-V2-Small\depth_anything_v2_vits.pth') '715fade13be8f229f8a70cc02066f656f2423a59effd0579197bbf57860e1378'
 
-Write-Host '3/3 CHARACTER: InContext nodes and LoRA'
-$character = Join-Path $ComfyRoot 'custom_nodes\comfyui-anima-incontext'
-if ($CharacterSource) {
-    New-Item -ItemType Directory -Force -Path $character | Out-Null
-    foreach ($name in @('__init__.py','incontext.py','nodes.py','style_adapter.py','style_nodes.py')) {
-        $sourceFile = Join-Path (Join-Path $CharacterSource 'comfyui-anima-incontext') $name
-        $targetFile = Join-Path $character $name
-        if (Test-Path -LiteralPath $targetFile) {
-            if ((Get-FileHash -LiteralPath $sourceFile).Hash -ne (Get-FileHash -LiteralPath $targetFile).Hash) { throw "Existing Character code differs: $name. Nothing overwritten." }
-        } else { Copy-Item -LiteralPath $sourceFile -Destination $targetFile }
-    }
-    $weight = Join-Path $CharacterSource 'anima-incontext-character.safetensors'
-    if ((Get-FileHash -LiteralPath $weight -Algorithm SHA256).Hash -ne '77eeb2c4263551f4760cc7af46196c6811ff623b7706f97a8f97c31ce5f0fe56') { throw 'Character weight hash mismatch.' }
-    New-Item -ItemType Directory -Force -Path (Join-Path $ModelsRoot 'loras') | Out-Null
-    $targetWeight = Join-Path $ModelsRoot 'loras\anima-incontext-character.safetensors'
-    if (Test-Path -LiteralPath $targetWeight) {
-        if ((Get-FileHash -LiteralPath $targetWeight).Hash -ne (Get-FileHash -LiteralPath $weight).Hash) { throw 'Existing Character weight differs; nothing overwritten.' }
-    } else { Copy-Item -LiteralPath $weight -Destination $targetWeight }
-} else {
-    try {
-        $characterDownload = Join-Path $packageRoot 'character-download'
-        foreach ($name in @('__init__.py','incontext.py','nodes.py','style_adapter.py','style_nodes.py')) {
-            Download-File "https://huggingface.co/darask0/Anima-InContext-Character/resolve/$($pins.character.revision)/comfyui-anima-incontext/$name" (Join-Path $characterDownload $name)
-        }
-        Download-File "https://huggingface.co/darask0/Anima-InContext-Character/resolve/$($pins.character.revision)/anima-incontext-character.safetensors" (Join-Path $ModelsRoot 'loras\anima-incontext-character.safetensors') '77eeb2c4263551f4760cc7af46196c6811ff623b7706f97a8f97c31ce5f0fe56'
-        New-Item -ItemType Directory -Force -Path $character | Out-Null
-        foreach ($name in @('__init__.py','incontext.py','nodes.py','style_adapter.py','style_nodes.py')) {
-            $targetFile = Join-Path $character $name
-            $sourceFile = Join-Path $characterDownload $name
-            if (Test-Path -LiteralPath $targetFile) {
-                if ((Get-FileHash -LiteralPath $targetFile).Hash -ne (Get-FileHash -LiteralPath $sourceFile).Hash) { throw "Existing Character code differs: $name" }
-            } else { Copy-Item -LiteralPath $sourceFile -Destination $targetFile }
-        }
-    } catch {
-        Write-Warning 'Character download unavailable (the source currently returns 401). Use an existing authorized local copy with -CharacterSource. Style/Depth installation is retained.'
-        Write-Host 'Restart ComfyUI with --gpu-only. Character is NOT ready yet.'
-        exit 2
-    }
-}
 Write-Host 'Installed. Restart ComfyUI with --gpu-only, then ask Jessica for generation_health.'
 } catch {
     Write-Host "INSTALLATION STOPPED: $($_.Exception.Message)" -ForegroundColor Red

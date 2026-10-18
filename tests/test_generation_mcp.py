@@ -9,19 +9,27 @@ from contextlib import AsyncExitStack
 from pathlib import Path
 
 import pytest
+from jsonschema import ValidationError
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from drawer_assistant.generation import batches, jobs
 from drawer_assistant.generation.graphs import build, inputs
-from drawer_assistant.generation.presets import NEGATIVE, PREFIX, array, normalize
-from drawer_assistant.generation.service import invoke
+from drawer_assistant.generation.presets import (
+    NEGATIVE,
+    PREFIX,
+    GenerationRequestError,
+    array,
+    canonical,
+    normalize,
+)
+from drawer_assistant.generation.service import invoke, schemas
 from drawer_assistant.network import object_map
 from drawer_assistant.store import transaction
 
 FRAME_COUNT = 2
 TASK_COUNT = 3
-TOOL_COUNT = 8
+TOOL_COUNT = 7
 TEST_STEPS = 40
 TEST_CFG = 8
 DEPTH_END = 0.6
@@ -114,15 +122,10 @@ def server_fixture(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
             base (str): Unused mock endpoint.
 
         Returns:
-            dict[str, object]: All four modes ready.
+            dict[str, object]: All three modes ready.
         """
         del base
-        return {
-            "modes": {
-                mode: {"ready": True}
-                for mode in ("text", "style", "character", "depth")
-            }
-        }
+        return {"modes": {mode: {"ready": True} for mode in ("text", "style", "depth")}}
 
     monkeypatch.setattr(jobs, "api", api)
     monkeypatch.setattr(jobs, "download", download)
@@ -211,13 +214,11 @@ def test_idempotence_uncertainty(
     assert invoke(settings, "anima_generate", uncertain)["state"] == "submitting"
 
 
-@pytest.mark.parametrize("reference_count", [1, 2])
-def test_reference_graphs(tmp_path: Path, reference_count: int) -> None:
+def test_reference_graphs(tmp_path: Path) -> None:
     """Ensure every reference is stretched first, windows and prompt overrides apply.
 
     Args:
         tmp_path (Path): Disposable reference/cache directory.
-        reference_count (int): Number of distinct latent inputs for Character.
 
     Returns:
         None: References, control inputs and overridable presets remain consistent.
@@ -231,7 +232,7 @@ def test_reference_graphs(tmp_path: Path, reference_count: int) -> None:
     """  # noqa: DOC502 - Input and graph builders are exercised.
     file = tmp_path / "reference.png"
     file.write_bytes(b"\x89PNG\r\n\x1a\nreference")
-    for mode in ("style", "character", "depth"):
+    for mode in ("style", "depth"):
         spec = normalize(
             mode,
             {
@@ -241,8 +242,7 @@ def test_reference_graphs(tmp_path: Path, reference_count: int) -> None:
             },
             tmp_path / "cache",
         )
-        names = ["uploaded.png"] * (reference_count if mode == "character" else 1)
-        graph = build(spec, names, 42)
+        graph = build(spec, ["uploaded.png"], 42)
         assert inputs(graph, "101")["crop"] == "disabled"
         assert inputs(graph, "101")["width"] == inputs(graph, "6")["width"]
         assert inputs(graph, "4")["text"] == "pencil drawing"
@@ -252,14 +252,58 @@ def test_reference_graphs(tmp_path: Path, reference_count: int) -> None:
             assert inputs(graph, "11")["image"] == ["101", 0]
             assert inputs(graph, "13")["end_percent"] == DEPTH_END
             assert inputs(graph, "19")["images"] == inputs(graph, "13")["image"]
-        if mode == "character":
-            assert inputs(graph, "12")["image"] == ["101", 0]
-            assert inputs(graph, "13")["fit_mode"] == "stretch"
-            if reference_count > 1:
-                assert inputs(graph, "201")["ref_latent_2"] == ["105", 0]
-                assert inputs(graph, "201")["fit_mode"] == "stretch"
     assert "painting" in PREFIX
     assert "painting" not in NEGATIVE
+
+
+def test_removed_character(
+    settings: Path, fake_server: list[dict[str, object]]
+) -> None:
+    """Reject removed modes through both entry points while preserving history.
+
+    Args:
+        settings (Path): Disposable profile settings and cache.
+        fake_server (list[dict[str, object]]): Captured GPU submissions.
+
+    Returns:
+        None: Discovery and batches exclude Character; old completed jobs remain.
+
+    Raises:
+        AssertionError: Removed work is submitted or historical data is lost.
+        OSError: Temporary profile or database cannot be accessed.
+        ValueError: Persisted request or result is malformed.
+        KeyError: Expected saved data is absent.
+        TypeError: Fixture JSON cannot be serialized.
+        RuntimeError: Mock transport or database fails.
+        sqlite3.Error: SQLite operations fail.
+    """  # noqa: DOC502 - Storage and service errors propagate.
+    assert "anima_character" not in schemas()
+    with pytest.raises(ValidationError):
+        invoke(
+            settings,
+            "anima_batch",
+            {
+                "request_id": "removed-batch",
+                "mode": "character",
+                "frames": [{"prompt": "a woman"}, {"prompt": "a garden"}],
+            },
+        )
+    path = Path(str(object_map(json.loads(settings.read_text("utf-8")))["database"]))
+    spec: dict[str, object] = {
+        "mode": "character",
+        "prompt": "old",
+        "options": {},
+        "references": [],
+    }
+    with pytest.raises(GenerationRequestError, match="removed"):
+        jobs.submit(path, "http://unused", "removed-job", spec)
+    jobs.reserve(path, "http://unused", "historical", spec)
+    jobs.update(path, "historical", {"state": "completed", "result": canonical({})})
+    assert (
+        invoke(settings, "generation_status", {"request_id": "historical"})["state"]
+        == "completed"
+    )
+    assert not fake_server
 
 
 def test_depth_preview(settings: Path, fake_server: list[dict[str, object]]) -> None:
@@ -374,7 +418,7 @@ def test_real_stdio(settings: Path) -> None:
         """Run an actual MCP client session without any Telegram or GPU mutation.
 
         Returns:
-            None: Eight tools are discovered and invalid input returns an error.
+            None: Seven tools are discovered and invalid input returns an error.
 
         Raises:
             AssertionError: Discovery or error handling differs from the contract.
@@ -392,6 +436,7 @@ def test_real_stdio(settings: Path) -> None:
             await session.initialize()
             discovered = await session.list_tools()
             assert len(discovered.tools) == TOOL_COUNT
+            assert "anima_character" not in {tool.name for tool in discovered.tools}
             invalid = await session.call_tool(
                 "anima_generate",
                 {"request_id": "bad", "prompt": "x", "endpoint": "forbidden"},

@@ -15,7 +15,7 @@ MCP — отдельный дочерний процесс без сетевог
 | MCP stdio, discovery, формат результатов/ошибок | `src/drawer_assistant/mcp_generation.py` |
 | Defaults и positive/negative | `src/drawer_assistant/generation/presets.py` |
 | Применение настроек, stretch, графы нескольких refs | `src/drawer_assistant/generation/graphs.py` |
-| Четыре API workflow | `src/drawer_assistant/generation/workflows/*.api.json` |
+| Три API workflow | `src/drawer_assistant/generation/workflows/*.api.json` |
 | Запуск, защита от дублей, статус, скачивание preview | `src/drawer_assistant/generation/jobs.py` |
 | Defaults/переопределения и последовательность batch | `src/drawer_assistant/generation/batches.py` |
 | HTTP загрузка/скачивание изображений | `src/drawer_assistant/generation/transport.py` |
@@ -44,7 +44,6 @@ MCP — отдельный дочерний процесс без сетевог
 |---|---|
 | `anima_generate` | Один кадр по тексту |
 | `anima_style` | Один кадр с одним стилевым референсом |
-| `anima_character` | Один кадр с 1–3 отдельными референсами внешности |
 | `anima_depth` | Один кадр с одним референсом композиции + карта глубины |
 | `anima_batch` | 2–16 кадров одного режима с индивидуальными настройками |
 | `generation_status` | Статус, скачивание результатов, продвижение пачки |
@@ -52,7 +51,7 @@ MCP — отдельный дочерний процесс без сетевог
 | `generation_health` | Проверка сервера по режимам без GPU-генерации |
 
 Hermes добавляет собственный префикс к именам. Скиллы предлагают искать инструмент
-через `tool_search`, а не угадывать имя. All In One/Pose отсутствуют.
+через `tool_search`, а не угадывать имя. Character/InContext, All In One и Pose отсутствуют. Исторические задания сохранены.
 
 ## Defaults и ручные настройки
 
@@ -62,18 +61,10 @@ Qwen3 0.6B Base и Qwen Image VAE; Anima Base не используется.
 Общие defaults: **512×512 · CFG 7 · 45 steps · res_multistep/simple · denoise 1**.
 Каждый референс сначала проходит ImageScale nearest-exact до этих размеров,
 с растяжением/сжатием, crop=disabled, без полей. Пропорции могут измениться.
-Для Character несколько refs объединяются как отдельные latent frames,
-не как один нарисованный коллаж. Внутренний fit_mode также stretch.
-
 Style: strength **0.65**, ref_image_size=512, siglip_layer=-1,
 ip_cfg_separate=false, gray_null=false, use_lora=true. IP CFG следует общему CFG.
 Ближе к 1 и выше чаще заимствуется композиция, ниже 0.65 стиль может быть слабым.
 Нужно описывать манеру английским текстом дополнительно к изображению.
-
-Character: strength **1.3**, start=0, end=1, cond_only=true, ref_timestep=0.
-Пробные силы: **1.2 / 1.3 / 1.5 / 1.6 / 1.8 / 2**. Ближе к 1 может сильнее
-заимствоваться стиль; повышение может усиливать персонажа, но не гарантирует лицо.
-В промпт добавляйте внешность/волосы/глаза/одежду и характерные детали.
 
 Depth: strength **1**, start=**0**, end=**0.6**. Карта управляет объёмом,
 композицией и приблизительной позой; это не точный скелет.
@@ -198,8 +189,9 @@ uv export --quiet --locked --no-dev --no-emit-project --format requirements-txt 
 
 ## Установка нод художнице
 
-Комплект: `deployment/install-anima-controls.ps1` плюс `revisions.json`,
-`style-compat.patch`, `depth-dtype.patch` из `experiments/anima-controls`.
+Комплект: `deployment/install-anima-controls.ps1`, CMD-файлы и инструкция;
+`generation/workflows/manifest.json` копируется в архив как `revisions.json`,
+`style-compat.patch`, `depth-dtype.patch` берутся из `experiments/anima-controls`.
 Закрыть ComfyUI, распаковать весь архив, дважды нажать `install-anima-controls.cmd`.
 Для восстановления Python-пакетов без скачивания нод и весов —
 `repair-anima-python.cmd`. Активация venv и глобальная смена ExecutionPolicy не нужны.
@@ -215,18 +207,19 @@ Python-код передаётся через stdin, чтобы избежать
 проверяет CUDA и нужные импорты. requirements существующего controlnet_aux
 проверяются и при повторном запуске, не только при первом клонировании.
 Другую версию существующих нод/весов не перезаписывает.
+В Comfy Desktop общий каталог ipadapter может быть зарегистрирован только в
+`%LOCALAPPDATA%/Comfy-Desktop/ComfyUI-Shared/models/ipadapter`, хотя обычные модели
+и Manager используют каталог установки на D:. По умолчанию установщик учитывает
+это для IP-Adapter; уже скачанные правильные веса копирует после проверки SHA-256.
+SigLIP закреплённая нода ищет относительно models_dir установки, поэтому он
+остаётся в её `models/siglip2/siglip2-base-patch16-512`. Явный -ModelsRoot
+заменяет оба пути. Runtime-пути проверяются через `/internal/folder_paths`.
 
 Style patch исправляет только compute dtype и изоляцию LoRA между заданиями;
 штатная выгрузка SigLIP на CPU сохранена. Depth patch исправляет только dtype
 входа, без обработки дополнительных кадров старого AiO. При повторном запуске
 скрипт заменяет точную прежнюю версию наших патчей, сохраняя исходник в
 `.before-controls-update`; неизвестные изменения файлов не перезаписывает.
-
-На момент подготовки прежний Character источник отвечает HTTP 401.
-Для уже скачанной разрешённой копии репозитория: `-CharacterSource "D:\Anima-InContext-Character"`.
-В папке нужны comfyui-anima-incontext и anima-incontext-character.safetensors.
-LoRA проверяется SHA-256. При недоступности скачивания скрипт завершится кодом 2
-и не объявит Character готовым. Не присылайте токены в чат.
 
 После установки перезапустить ComfyUI GPU-only и проверить generation_health.
 Успех API/моков не доказывает работу адаптеров или качество на RTX 3080;

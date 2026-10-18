@@ -14,7 +14,7 @@ drawer_anima_batch и drawer_image_sheet заменены MCP. Не меняй �
 ## Инструменты
 
 - anima_generate — один кадр по тексту.
-- anima_style / anima_character / anima_depth — один тип контроля по изображению.
+- anima_style / anima_depth — один тип контроля по изображению.
 - anima_batch — несколько отдельных кадров и необязательный коллаж.
 - generation_status — статус одиночного задания или пачки.
 - image_sheet — сборка уже готовых картинок, без новой генерации.
@@ -26,7 +26,7 @@ MCP загружает файлы в ComfyUI сам. Windows-путь худож
 
 ## Batch
 
-Один mode на пачку: text/style/character/depth. frames — 2–16 объектов,
+Один mode на пачку: text/style/depth. frames — 2–16 объектов,
 каждый с отдельным prompt. defaults задаёт общие options, references — общие refs.
 Каждый frame может независимо переопределить options и references:
 seed, cfg, steps, размеры, sampler, strength, start/end_percent и prompt preset.

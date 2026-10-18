@@ -10,7 +10,8 @@
 - Каждая модель генерации — отдельный tool с фиксированной моделью. Общие HTTP,
   валидация и хранение переиспользуются; будущий MCP оборачивает те же функции.
 - В действующем профиле генерация — MCP drawer_generation (stdio) только Nova.
-  Text, Style, Character и Depth — отдельные tools, без All In One/Pose.
+  Text, Style и Depth — отдельные tools, без Character/InContext, All In One/Pose.
+  Character удалён из схем, batch, workflow и рабочих skills; история сохранена.
   Старые native drawer_anima/batch/sheet отключены при generation_mcp=true.
   Z-Image, Flux, Alibaba
   и штатный ChatGPT image_gen отключены в схемах, регистрации и toolsets.
