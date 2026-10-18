@@ -22,6 +22,14 @@ Manager также пишет модели на D:. Его одна попытк
 Ниже — история прежних проверок; прежние восемь tools/Character не являются
 текущим контрактом MCP.
 
+Развёрнуто на EC2: настоящий stdio-клиент обнаружил семь tools, без
+anima_character и без character в batch enum/health. Telegram снова connected,
+контейнер running, restarts=0, OOM=false; другой Hermes хоста active.
+SOUL, config.yaml, .env, cron/jobs.json и settings.json сохранены побайтно.
+Перед обновлением сохранены затронутые файлы профиля и прежний Docker image;
+схема БД и пользовательские данные не менялись. Полный poe check:134 passed,
+3 live PostgreSQL skipped; audit без известных уязвимостей зависимостей проекта.
+
 ## Подтверждено
 
 - Полный `uv run poe check`: **134 passed**, 3 live PostgreSQL tests skipped локально.
