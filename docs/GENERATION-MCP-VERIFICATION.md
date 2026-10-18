@@ -1,5 +1,21 @@
 # Проверка MCP генерации — 17.10.2026
 
+## Исправление блокировки hooks — 18.10.2026
+
+После автодоставки обнаружен дефект: `Path` в before_tool был импортирован лишь
+под TYPE_CHECKING. Python 3.14 вычисляет аннотации при inspect.signature(partial);
+Hermes делает это до вызова тела hook. NameError превращался в fail-closed veto
+любого инструмента, включая чтение файлов. Прежний прямой smoke-вызов hook эту
+ветку не проверял; регистрации callback было недостаточно.
+
+Path перенесён в runtime import, добавлена точечная проверка introspection
+зарегистрированного partial. Полный poe check: 141 passed, 4 PostgreSQL skipped.
+На EC2 проверен настоящий PluginManager.invoke_hook: read_file, drawer_orders
+и generation_health проходят; start hook с изолированной SQLite сохраняет
+Telegram origin через bounded dispatcher и ContextVars. GPU POST и отправки
+Telegram в этом тесте не выполнялись. Исправление сначала установлено в профиль
+и gateway перезапущен; затем переносится в воспроизводимый Docker-образ.
+
 ## Автодоставка — 18.10.2026
 
 EC2 обновлён до `19dfef8`: отдельный Compose worker без LLM продолжает Text,

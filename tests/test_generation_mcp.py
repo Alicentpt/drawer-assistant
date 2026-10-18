@@ -3,10 +3,12 @@
 """Exercise persistent reference-aware jobs, failure boundaries and real MCP stdio."""
 
 import asyncio
+import inspect
 import json
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AsyncExitStack
+from functools import partial
 from pathlib import Path
 from time import time
 
@@ -19,6 +21,7 @@ from drawer_assistant.generation import batches, jobs
 from drawer_assistant.generation import worker as delivery_worker
 from drawer_assistant.generation.delivery import capture, information
 from drawer_assistant.generation.graphs import build, inputs
+from drawer_assistant.generation.hermes_delivery import before_tool
 from drawer_assistant.generation.presets import (
     NEGATIVE,
     PREFIX,
@@ -38,6 +41,30 @@ TOOL_COUNT = 7
 TEST_STEPS = 40
 TEST_CFG = 8
 DEPTH_END = 0.6
+
+
+def test_hook_runtime_annotations(settings: Path) -> None:
+    """Resolve a registered callback signature before dispatching unrelated tools.
+
+    Args:
+        settings (Path): Disposable settings path bound by native registration.
+
+    Returns:
+        None: Python 3.14 introspection and unrelated tool calls both succeed.
+
+    Raises:
+        AssertionError: Signature evaluation fails or an unrelated tool is blocked.
+        ValueError: Inspect cannot resolve the callback signature.
+        TypeError: The registered callable cannot be inspected.
+    """  # noqa: DOC502 - Signature introspection and assertions can fail.
+    callback = partial(before_tool, settings)
+    signature = inspect.signature(callback)
+    assert "context" in signature.parameters
+    assert callback(tool_name="read_file", args={}) is None
+    assert callback(tool_name="drawer_orders", args={"action": "list"}) is None
+    assert (
+        callback(tool_name="mcp__drawer_generation__generation_health", args={}) is None
+    )
 
 
 class ReceiptQueue:  # pylint: disable=too-few-public-methods

@@ -4,6 +4,7 @@
 
 import sqlite3
 from importlib import import_module
+from pathlib import Path  # noqa: TC003 - Hermes evaluates hook annotations at runtime.
 from typing import TYPE_CHECKING, Protocol, cast
 
 from drawer_assistant.network import object_map
@@ -12,7 +13,6 @@ from .delivery import START_TOOLS, capture
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
 
 
 class Queue(Protocol):  # pylint: disable=too-few-public-methods
