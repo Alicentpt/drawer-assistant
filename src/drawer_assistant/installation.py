@@ -96,6 +96,9 @@ def install_files(profile: Path, env_file: Path) -> None:
                     settings.get("IMAGEMAGICK_BINARY") or ""
                 ),
                 "generation_mcp": True,
+                "generation_auto_delivery": delivery_enabled(
+                    destination / "settings.json"
+                ),
             }
         ),
         encoding="utf-8",
@@ -115,6 +118,28 @@ def install_files(profile: Path, env_file: Path) -> None:
     )
     configure_toolset(profile, timezone)
     configure_generation_mcp(profile)
+
+
+def delivery_enabled(settings_file: Path) -> bool:
+    """Preserve an operator-enabled worker flag across normal plugin updates.
+
+    Args:
+        settings_file (Path): Existing installed plugin configuration, if any.
+
+    Returns:
+        bool: Previously enabled flag; new profiles default to no background sends.
+
+    Raises:
+        OSError: Existing settings cannot be read.
+        ValueError: Existing settings are not valid JSON objects.
+    """  # noqa: DOC502 - File and parser failures propagate.
+    return (
+        settings_file.exists()
+        and object_map(json.loads(settings_file.read_text("utf-8"))).get(
+            "generation_auto_delivery"
+        )
+        is True
+    )
 
 
 def configure_generation_mcp(profile: Path) -> None:

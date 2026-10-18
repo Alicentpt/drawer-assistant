@@ -3,8 +3,9 @@
 """Dispatch validated generation tools without depending on an agent runtime."""
 
 import json
+from contextlib import suppress
 from pathlib import Path
-from time import monotonic, sleep
+from time import monotonic, sleep, time
 from typing import TYPE_CHECKING
 
 from jsonschema import Draft202012Validator
@@ -14,8 +15,11 @@ from drawer_assistant.image_sheet import sheet
 from drawer_assistant.network import object_map
 
 from . import batches, jobs
+from .delivery import information
 from .health import inspect_server
 from .presets import normalize
+
+HEARTBEAT_MAX_AGE = 120
 
 if TYPE_CHECKING:
     from drawer_assistant.database import Location
@@ -34,6 +38,22 @@ def schemas() -> dict[str, object]:
     return object_map(
         json.loads((Path(__file__).parent / "tools.json").read_text("utf-8"))
     )
+
+
+def worker_running(settings_file: Path) -> bool:
+    """Check recent worker progress without exposing local paths or credentials.
+
+    Args:
+        settings_file (Path): Profile-local plugin settings next to the heartbeat.
+
+    Returns:
+        bool: True for a readable heartbeat no older than two minutes.
+    """
+    heartbeat = settings_file.parent / "generation-worker.json"
+    with suppress(OSError, ValueError, KeyError):
+        stamp = object_map(json.loads(heartbeat.read_text("utf-8")))["checked_at"]
+        return 0 <= time() - float(str(stamp)) < HEARTBEAT_MAX_AGE
+    return False
 
 
 def status(path: Location, identifier: str, executable: str) -> dict[str, object]:
@@ -106,16 +126,31 @@ def invoke(
     base = str(settings.get("comfy_anima_url") or settings["comfy_url"]).rstrip("/")
     executable = str(settings.get("imagemagick_binary") or "")
     if tool == "generation_health":
-        return inspect_server(base)
+        return {
+            **inspect_server(base),
+            "automatic_delivery": settings.get("generation_auto_delivery") is True,
+            "worker_running": worker_running(settings_file),
+        }
     if tool == "image_sheet":
         return sheet(path.parent / "image-sheets", params, executable)
     identifier = str(params["request_id"])
+    delivery = information(path, identifier)
     if tool == "generation_status":
-        return status(path, identifier, executable)
-    if tool == "anima_batch":
+        result = (
+            jobs.public(jobs.read(path, identifier))
+            if delivery["automatic"]
+            else status(path, identifier, executable)
+        )
+    elif tool == "anima_batch":
         spec = batches.prepare(path, params)
-        jobs.reserve(path, base, identifier, spec)
-        return batches.advance(path, identifier, executable)
-    mode = "text" if tool == "anima_generate" else tool.removeprefix("anima_")
-    spec = normalize(mode, params, path.parent / "generation-inputs")
-    return jobs.submit(path, base, identifier, spec)
+        created = jobs.reserve(path, base, identifier, spec)
+        result = (
+            batches.advance(path, identifier, executable)
+            if created or not delivery["automatic"]
+            else jobs.public(jobs.read(path, identifier))
+        )
+    else:
+        mode = "text" if tool == "anima_generate" else tool.removeprefix("anima_")
+        spec = normalize(mode, params, path.parent / "generation-inputs")
+        result = jobs.submit(path, base, identifier, spec)
+    return {**result, "delivery": information(path, identifier)}

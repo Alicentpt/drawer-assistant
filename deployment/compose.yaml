@@ -24,3 +24,23 @@ services:
       options:
         max-size: 10m
         max-file: "3"
+  generation-worker:
+    image: drawer-hermes:anima-mcp
+    restart: unless-stopped
+    user: "${HERMES_UID:-1000}:${HERMES_GID:-1000}"
+    dns:
+      - 100.100.100.100
+    volumes:
+      - ./state/hermes:/opt/data
+    environment:
+      HERMES_HOME: /opt/data/profiles/drawer-assistant
+      TZ: Europe/Moscow
+    entrypoint: ["/opt/hermes/.venv/bin/python", "-m", "drawer_assistant.generation.worker"]
+    command: ["--settings", "/opt/data/profiles/drawer-assistant/plugins/drawer/settings.json"]
+    stop_grace_period: 60s
+    mem_limit: 192m
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"

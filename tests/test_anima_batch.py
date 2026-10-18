@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 FRAME_COUNT = 16
-EXPECTED_SCHEMA = 7
+EXPECTED_SCHEMA = 8
 
 
 def test_sixteen_independent_frames(

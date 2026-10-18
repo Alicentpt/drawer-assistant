@@ -29,6 +29,7 @@ TABLES = (
     "stage_images",
     "image_batches",
     "generation_tasks",
+    "generation_deliveries",
 )
 type Manifest = dict[str, dict[str, str | int]]
 

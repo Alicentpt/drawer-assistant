@@ -16,6 +16,7 @@ from psycopg import sql
 
 from drawer_assistant.database import Database, configured_database
 from drawer_assistant.generation import jobs
+from drawer_assistant.generation.worker import claim
 from drawer_assistant.migration import snapshot, transfer
 from drawer_assistant.order_views import order_info
 from drawer_assistant.references import references
@@ -123,6 +124,10 @@ def populate(path: Path | Database, directory: Path) -> bytes:
     )
     with transaction(path) as database:
         database.execute(
+            "INSERT INTO generation_deliveries(id,origin,created,state) "
+            "VALUES('archived','{}',0,'delivered')"
+        )
+        database.execute(
             "INSERT INTO jobs(id,prompt,workflow,prompt_id,state) VALUES(?,?,?,?,?)",
             (
                 "gpu-job",
@@ -216,14 +221,16 @@ def test_snapshot_copy_integrity(tmp_path: Path, postgres_database: Database) ->
         snapshot(source, backup)
 
 
-def test_generation_upgrade(postgres_database: Database) -> None:
-    """Upgrade a simulated version-six schema without changing existing orders.
+@pytest.mark.parametrize("version", [6, 7])
+def test_generation_upgrade(postgres_database: Database, version: int) -> None:
+    """Upgrade old schemas without changing existing orders or GPU tasks.
 
     Args:
         postgres_database (Database): Disposable uniquely named PostgreSQL schema.
+        version (int): Source schema version six or seven.
 
     Returns:
-        None: Version-seven task writes work and old order data remains intact.
+        None: Version-eight routing leases work and old order data remains intact.
 
     Raises:
         AssertionError: Migration changes stored orders or task persistence fails.
@@ -240,13 +247,27 @@ def test_generation_upgrade(postgres_database: Database) -> None:
     )
     before = orders(postgres_database, {"action": "list"})
     with transaction(postgres_database) as database:
-        database.execute("DROP TABLE generation_tasks")
-        database.execute("UPDATE drawer_schema SET version=6 WHERE singleton=1")
+        database.execute("DROP TABLE generation_deliveries")
+        if version == 6:  # noqa: PLR2004 - Version under test, not a runtime threshold.
+            database.execute("DROP TABLE generation_tasks")
+        database.execute(
+            "UPDATE drawer_schema SET version=? WHERE singleton=1", (version,)
+        )
     assert jobs.reserve(
         postgres_database, "http://localhost:8188", "new", {"mode": "text"}
     )
     assert jobs.read(postgres_database, "new")["state"] == "submitting"
     assert orders(postgres_database, {"action": "list"}) == before
+    with transaction(postgres_database) as database:
+        database.execute(
+            "INSERT INTO generation_deliveries(id,origin,created) VALUES('new','{}',0)"
+        )
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        futures = [
+            workers.submit(claim, postgres_database, owner, 100) for owner in ("a", "b")
+        ]
+        assert sum(future.result() is not None for future in futures) == 1
+    assert claim(postgres_database, "replacement", 701) is not None
 
 
 def test_postgres_rollback_and_reminder_lock(postgres_database: Database) -> None:

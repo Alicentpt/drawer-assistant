@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Protocol
 from . import comfy
 from .anima_batch import batch, multipanel
 from .database import configured_database
+from .generation.hermes_delivery import before_tool
 from .image_sheet import sheet
 from .network import object_map
 from .order_views import order_digest, order_info
@@ -78,6 +79,22 @@ class PluginContext(Protocol):  # pylint: disable=too-few-public-methods
             RuntimeError: The host rejects registration.
         """  # noqa: DOC502 - Exceptions belong to the external host implementation.
         del name, toolset, schema, handler
+        return NotImplemented
+
+    def register_hook(self, hook_name: str, callback: Callable[..., object]) -> object:
+        """Register a host lifecycle observer in the owning profile.
+
+        Args:
+            hook_name (str): Native Hermes hook identifier.
+            callback (Callable[..., object]): Callback receiving trusted context.
+
+        Returns:
+            object: Unused opaque registration handle.
+
+        Raises:
+            RuntimeError: The host rejects registration.
+        """  # noqa: DOC502 - Host implementation can reject registration.
+        del hook_name, callback
         return NotImplemented
 
 
@@ -291,6 +308,8 @@ def register(ctx: PluginContext) -> None:
         )
         is True
     )
+    if mcp:
+        ctx.register_hook("pre_tool_call", partial(before_tool, settings_file))
     for tool, value in schemas.items():
         if mcp and tool in {"drawer_anima", "drawer_anima_batch", "drawer_image_sheet"}:
             continue

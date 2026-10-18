@@ -5,8 +5,10 @@
 import asyncio
 import json
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import AsyncExitStack
 from pathlib import Path
+from time import time
 
 import pytest
 from jsonschema import ValidationError
@@ -14,6 +16,8 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from drawer_assistant.generation import batches, jobs
+from drawer_assistant.generation import worker as delivery_worker
+from drawer_assistant.generation.delivery import capture, information
 from drawer_assistant.generation.graphs import build, inputs
 from drawer_assistant.generation.presets import (
     NEGATIVE,
@@ -24,6 +28,7 @@ from drawer_assistant.generation.presets import (
     normalize,
 )
 from drawer_assistant.generation.service import invoke, schemas
+from drawer_assistant.generation.worker import claim, tick
 from drawer_assistant.network import object_map
 from drawer_assistant.store import transaction
 
@@ -33,6 +38,330 @@ TOOL_COUNT = 7
 TEST_STEPS = 40
 TEST_CFG = 8
 DEPTH_END = 0.6
+
+
+class ReceiptQueue:  # pylint: disable=too-few-public-methods
+    """Model durable native queue deduplication without contacting Telegram.
+
+    Attributes:
+        messages (dict[str, str]): First payload per execution id.
+        status (str): Disposition returned by subsequent enqueue acknowledgements.
+    """  # noqa: DOC302 - Repository requires constructor Returns documentation.
+
+    messages: dict[str, str]
+    status: str
+
+    def __init__(self) -> None:
+        """Initialize an isolated in-memory receipt store.
+
+        Returns:
+            None: No network connection or delivery is created.
+        """  # noqa: DOC303 - Repository requires constructor Returns documentation.
+        self.messages = {}
+        self.status = "pending"
+
+    def enqueue(
+        self, execution_id: str, job: dict[str, object], content: str
+    ) -> dict[str, object]:
+        """Keep only the first payload, like the native Hermes queue.
+
+        Args:
+            execution_id (str): Stable receipt key.
+            job (dict[str, object]): Expected trusted destination.
+            content (str): Plain text and MEDIA lines, never sent to Telegram.
+
+        Returns:
+            dict[str, object]: Configurable acknowledged disposition.
+
+        Raises:
+            AssertionError: Destination or idempotent payload changes.
+        """  # noqa: DOC502 - Assertions may fail.
+        assert object_map(job["origin"])["chat_id"] == "-12345"
+        assert self.messages.setdefault(execution_id, content) == content
+        return {"status": self.status}
+
+
+def route(settings: Path, tool: str, params: dict[str, object]) -> Path:
+    """Enable local worker tests and bind one synthetic trusted group origin.
+
+    Args:
+        settings (Path): Disposable profile configuration.
+        tool (str): Unprefixed MCP start tool name.
+        params (dict[str, object]): Generation arguments.
+
+    Returns:
+        Path: Isolated SQLite database used by this test.
+
+    Raises:
+        OSError: Fixture cannot be written.
+        ValueError: Configuration or route validation fails.
+        KeyError: Required settings are absent.
+        RuntimeError: Storage fails.
+        sqlite3.Error: SQLite operations fail.
+        TypeError: Fixture cannot be serialized.
+    """  # noqa: DOC502 - Real capture/storage operations are exercised.
+    config = object_map(json.loads(settings.read_text("utf-8")))
+    config["generation_auto_delivery"] = True
+    settings.write_text(json.dumps(config), "utf-8")
+    (settings.parents[2] / ".env").write_text(
+        "TELEGRAM_ALLOWED_CHATS=-12345\n", "utf-8-sig"
+    )
+    capture(
+        settings,
+        "mcp__drawer_generation__" + tool,
+        params,
+        {"platform": "telegram", "chat_id": "-12345", "user_id": "77", "thread_id": ""},
+    )
+    return Path(str(config["database"]))
+
+
+def test_automatic_depth(settings: Path, fake_server: list[dict[str, object]]) -> None:
+    """Complete and deliver a routed depth job after the initiating turn is gone.
+
+    Args:
+        settings (Path): Disposable profile with no actual Telegram credentials.
+        fake_server (list[dict[str, object]]): Actual submitted mock GPU graphs.
+
+    Returns:
+        None: Image/map reach one durable receipt, including after a worker restart.
+
+    Raises:
+        AssertionError: Delivery, timing, routing or idempotence is incorrect.
+        OSError: Fixture cannot be written.
+        ValueError: Configuration or task data is invalid.
+        KeyError: Required result is absent.
+        TypeError: Fixture cannot be serialized.
+        RuntimeError: Mock backend fails.
+        sqlite3.Error: SQLite operations fail.
+        jsonschema.ValidationError: Fixture violates the published schema.
+    """  # noqa: DOC502 - Real service/worker/storage operations are exercised.
+    reference = settings.parent / "ref.png"
+    reference.write_bytes(b"\x89PNG\r\n\x1a\nreference")
+    params: dict[str, object] = {
+        "request_id": "auto-depth",
+        "prompt": "a room, painting",
+        "references": [str(reference)],
+    }
+    path = route(settings, "anima_depth", params)
+    assert object_map(invoke(settings, "anima_depth", params)["delivery"])["automatic"]
+    native = ReceiptQueue()
+    assert tick(settings, native, time())
+    payload = native.messages["drawer-generation:auto-depth"]
+    assert payload.count("MEDIA:") == FRAME_COUNT
+    assert "Карта глубины" in payload
+    assert "0.0 - 0.6" in payload
+    native.status = "delivered"
+    assert tick(settings, native, time() + 10)
+    assert information(path, "auto-depth")["state"] == "delivered"
+    assert not tick(settings, native, time() + 20)
+    assert len(native.messages) == len(fake_server) == 1
+
+
+def test_automatic_batch(settings: Path, fake_server: list[dict[str, object]]) -> None:
+    """Advance all frames without a single generation_status invocation.
+
+    Args:
+        settings (Path): Disposable profile and worker configuration.
+        fake_server (list[dict[str, object]]): Submitted mock GPU graphs.
+
+    Returns:
+        None: Next frame starts automatically and both outputs reach one receipt.
+
+    Raises:
+        AssertionError: Batch progression, recovery or delivery is incorrect.
+        OSError: Fixture cannot be written.
+        ValueError: Configuration or task data is invalid.
+        KeyError: Required result is absent.
+        TypeError: Fixture cannot be serialized.
+        RuntimeError: Mock backend fails.
+        sqlite3.Error: SQLite operations fail.
+        jsonschema.ValidationError: Fixture violates the published schema.
+    """  # noqa: DOC502 - Real service/worker/storage operations are exercised.
+    params: dict[str, object] = {
+        "request_id": "auto-batch",
+        "mode": "text",
+        "assemble": False,
+        "frames": [{"prompt": "a forest"}, {"prompt": "a castle"}],
+    }
+    path = route(settings, "anima_batch", params)
+    invoke(settings, "anima_batch", params)
+    native = ReceiptQueue()
+    assert tick(settings, native, time())
+    assert len(fake_server) == FRAME_COUNT
+    assert not native.messages
+    assert tick(settings, native, time() + 10)
+    assert (
+        native.messages["drawer-generation:auto-batch"].count("MEDIA:") == FRAME_COUNT
+    )
+    native.status = "unknown"
+    assert tick(settings, native, time() + 20)
+    assert information(path, "auto-batch")["state"] == "unknown"
+    assert not tick(settings, native, time() + 30)
+    assert len(fake_server) == FRAME_COUNT
+
+
+def test_route_restriction(settings: Path) -> None:
+    """Reject a model-selected foreign destination and preserve existing job history.
+
+    Args:
+        settings (Path): Isolated profile, configuration and task database.
+
+    Returns:
+        None: Only fresh, trusted group calls acquire automatic delivery.
+
+    Raises:
+        AssertionError: A foreign chat, local call or old job gets automatic delivery.
+        OSError: Fixture cannot be written.
+        ValueError: Fixture configuration or storage is invalid.
+        KeyError: Required settings are absent.
+        RuntimeError: Storage fails.
+        TypeError: Fixture cannot be serialized.
+        sqlite3.Error: SQLite operations fail.
+    """  # noqa: DOC502 - Real capture/storage operations are exercised.
+    params: dict[str, object] = {"request_id": "routed"}
+    path = route(settings, "anima_generate", params)
+    with pytest.raises(ValueError, match="configured group"):
+        capture(
+            settings,
+            "mcp__drawer_generation__anima_generate",
+            params,
+            {"platform": "telegram", "chat_id": "-999"},
+        )
+    jobs.reserve(path, "mock", "old", {"mode": "text"})
+    route(settings, "anima_generate", {"request_id": "old"})
+    assert information(path, "old") == {"automatic": False}
+    capture(
+        settings,
+        "mcp__drawer_generation__anima_generate",
+        {"request_id": "cli"},
+        {"platform": "cli"},
+    )
+    assert information(path, "cli") == {"automatic": False}
+
+
+def test_worker_lease(settings: Path) -> None:
+    """Serialize competing workers and recover a lease after its process exits.
+
+    Args:
+        settings (Path): Disposable route configuration and database.
+
+    Returns:
+        None: One worker owns a live lease; a replacement can resume it later.
+
+    Raises:
+        AssertionError: Concurrent claims or lease recovery is incorrect.
+        OSError: Fixture cannot be written.
+        ValueError: Fixture configuration or storage is invalid.
+        KeyError: Required settings are absent.
+        RuntimeError: Storage fails.
+        TypeError: Fixture cannot be serialized.
+        sqlite3.Error: SQLite operations fail.
+    """  # noqa: DOC502 - Real capture/storage operations are exercised.
+    path = route(settings, "anima_generate", {"request_id": "leased"})
+    clock = time()
+    with ThreadPoolExecutor(max_workers=FRAME_COUNT) as workers:
+        futures = [
+            workers.submit(claim, path, owner, clock) for owner in ("first", "second")
+        ]
+        results = [future.result() for future in futures]
+    assert sum(row is not None for row in results) == 1
+    assert claim(path, "replacement", clock + 601) is not None
+
+
+def test_worker_offline(
+    settings: Path,
+    fake_server: list[dict[str, object]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Retry only polling after a connection error without resubmitting GPU work.
+
+    Args:
+        settings (Path): Isolated worker profile.
+        fake_server (list[dict[str, object]]): GPU submission records.
+        monkeypatch (pytest.MonkeyPatch): Temporary worker failure injection.
+
+    Returns:
+        None: Polling resumes after backoff; private error details stay hidden.
+
+    Raises:
+        AssertionError: A failure leaks details, loses state or duplicates GPU work.
+        OSError: Fixture cannot be written.
+        ValueError: Fixture inputs or storage are invalid.
+        KeyError: Expected records are absent.
+        RuntimeError: Mock backend fails unexpectedly.
+        TypeError: Fixture cannot be serialized.
+        sqlite3.Error: SQLite operations fail.
+        jsonschema.ValidationError: Fixture violates its schema.
+    """  # noqa: DOC502 - Real service/worker/storage operations are exercised.
+    params: dict[str, object] = {"request_id": "offline", "prompt": "a forest"}
+    path = route(settings, "anima_generate", params)
+    invoke(settings, "anima_generate", params)
+    native = ReceiptQueue()
+    clock = time()
+    with monkeypatch.context() as patch:
+        # Retain the worker state machine while its remote step is unavailable.
+        patch.setattr(delivery_worker, "advance", failing_poll)
+        assert tick(settings, native, clock)
+        assert information(path, "offline")["last_error"] == "RuntimeError"
+        assert not tick(settings, native, clock + 1)
+        assert (
+            invoke(settings, "generation_status", {"request_id": "offline"})["state"]
+            == "queued"
+        )
+    assert tick(settings, native, clock + 10)
+    assert len(native.messages) == len(fake_server) == 1
+
+
+def failing_poll(path: object, record: object, executable: object, now: object) -> None:
+    """Simulate an interrupted remote read without using a real network.
+
+    Args:
+        path (object): Unused test database.
+        record (object): Unused captured route.
+        executable (object): Unused executable.
+        now (object): Unused clock.
+
+    Returns:
+        None: Never returns.
+
+    Raises:
+        RuntimeError: Always, including private detail that must not reach status.
+    """
+    del path, record, executable, now
+    message = "private remote response with credentials"
+    raise RuntimeError(message)
+
+
+def test_uncertain_submission(
+    settings: Path, fake_server: list[dict[str, object]]
+) -> None:
+    """Notify about stale uncertain submission without another GPU POST.
+
+    Args:
+        settings (Path): Isolated worker profile.
+        fake_server (list[dict[str, object]]): GPU submission records, kept empty.
+
+    Returns:
+        None: An active submission is left alone, then one check notice is queued.
+
+    Raises:
+        AssertionError: The worker resubmits an uncertain generation.
+        OSError: Fixture cannot be written.
+        ValueError: Fixture inputs or storage are invalid.
+        KeyError: Expected records are absent.
+        RuntimeError: Storage fails.
+        TypeError: Fixture cannot be serialized.
+        sqlite3.Error: SQLite operations fail.
+    """  # noqa: DOC502 - Actual route/storage operations are exercised.
+    path = route(settings, "anima_generate", {"request_id": "uncertain"})
+    jobs.reserve(path, "mock", "uncertain", {"mode": "text"})
+    native = ReceiptQueue()
+    clock = time()
+    assert tick(settings, native, clock)
+    assert not native.messages
+    assert tick(settings, native, clock + 601)
+    assert "нужна проверка" in native.messages["drawer-generation:uncertain"]
+    assert not fake_server
 
 
 @pytest.fixture(name="settings")

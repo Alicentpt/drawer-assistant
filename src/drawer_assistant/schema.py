@@ -59,6 +59,15 @@ CREATE TABLE IF NOT EXISTS generation_tasks (
 )
 """
 
+DELIVERY_SCHEMA = """
+CREATE TABLE IF NOT EXISTS generation_deliveries (
+ id TEXT PRIMARY KEY, origin TEXT NOT NULL,
+ state TEXT NOT NULL DEFAULT 'waiting', created REAL NOT NULL,
+ next_attempt REAL NOT NULL DEFAULT 0, owner TEXT NOT NULL DEFAULT '',
+ attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT NOT NULL DEFAULT ''
+)
+"""
+
 STAGE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS order_stages (
  order_id TEXT NOT NULL REFERENCES orders(id), id TEXT NOT NULL,

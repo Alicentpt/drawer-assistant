@@ -112,7 +112,10 @@ seed, cfg, steps, размеры, sampler, denoise, shift, strength, start/end �
 strength/start/end для неподходящего режима отклоняются, не игнорируются.
 Один mode на пачку. `assemble=false` оставляет отдельные результаты без сетки.
 
-Пачка запускает следующий кадр при `generation_status`; фонового worker нет.
+Для вызовов из разрешённой Telegram-группы pre_tool_call hook сохраняет маршрут
+до GPU POST. Worker без LLM продолжает пачку и передаёт файлы в штатную
+`cron.delivery_queue` Hermes. `generation_status` для таких задач только читает
+сохранённое состояние. Локальные задания без маршрута продолжаются при status.
 При перезапуске клиента продолжить с сохранённым request_id. При submitting
 не делать новый POST: сначала выяснить, принял ли ComfyUI предыдущее задание.
 Готовые кадры сохраняются при ошибке других; полный коллаж появляется только
@@ -120,7 +123,7 @@ strength/start/end для неподходящего режима отклоня
 
 ## Что хранится
 
-PostgreSQL/SQLite, миграция **7**, новая таблица `generation_tasks`.
+PostgreSQL/SQLite, миграция **8**, таблицы `generation_tasks` и `generation_deliveries`.
 Существующие заказы, ссылки, BYTEA, старые задания и напоминания не переписываются.
 Сохранены нормализованный запрос, endpoint, seed, prompt_id, состояние и результат.
 Перед удалённой отправкой сохраняется intent. Повторы с другим запросом запрещены.
@@ -143,7 +146,7 @@ MCP принимает файлы, которые Hermes получает чер
 - `skills/` — дополнительные пользовательские навыки, setup их не стирает.
 - `config.yaml` → mcp_servers.drawer_generation — команда stdio и её аргументы.
 - `config.yaml` → platform_toolsets.telegram — включён drawer_generation (в реестре mcp-drawer_generation).
-- `plugins/drawer/settings.json` — endpoint/cache, generation_mcp=true.
+- `plugins/drawer/settings.json` — endpoint/cache, generation_mcp=true, generation_auto_delivery=true.
 - `.env` — секреты профиля, **не отправлять в чат**.
 - `logs/mcp-stderr.log` — диагностический stderr MCP.
 
@@ -227,3 +230,29 @@ Style patch исправляет только compute dtype и изоляцию 
 
 Протокол: [официальный Python SDK](https://github.com/modelcontextprotocol/python-sdk).
 Описание stdio: [MCP Build server](https://modelcontextprotocol.io/docs/develop/build-server).
+
+## Фоновая доставка
+
+`generation/delivery.py` хранит проверенный маршрут в выбранной БД.
+`generation/hermes_delivery.py` — тонкий мост к штатным hook/очереди Hermes.
+`generation/worker.py` — Compose-сервис `generation-worker`: проверка раз в
+5 секунд на задачу, без LLM. Состояние и lease сохраняются в БД; после аварии
+lease освобождается через 10 минут. При недоступном ComfyUI — backoff до минуты.
+Старые задания без маршрута автоматически в Telegram не рассылаются.
+
+Включение: `plugins/drawer/settings.json` → `generation_auto_delivery: true`
+и `docker compose up -d generation-worker`. Без этого обещания автодоставки нет.
+Настройка не меняет cron заказов. Worker использует тот же образ и volume, отдельный
+процесс, без второго Telegram poller. Health: `generation_health` →
+`automatic_delivery`, `worker_running`; heartbeat — `plugins/drawer/generation-worker.json`.
+
+Доставка имеет стабильный ключ `drawer-generation:<id>`. Повторный handoff не
+создаёт вторую запись; pending переживает перезапуск gateway. Native очередь
+не повторяет отправку с неизвестным исходом (`unknown`): требуется проверка,
+а не обещание exactly-once поверх Telegram. Готовые файлы остаются доступны.
+Сообщение зеркалится в историю общими механизмами Hermes. Секреты и chat id
+не попадают в схемы MCP; локальный stdio-вызов не получает адреса Telegram.
+
+`delivery.automatic=true` в результате запуска означает, что агенту нельзя
+самостоятельно дублировать MEDIA. Проверку этой логики проводят с изолированной
+очередью/тестовым sink; реальные сообщения в группу — только при явном тесте.

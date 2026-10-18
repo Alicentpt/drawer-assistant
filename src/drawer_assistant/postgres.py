@@ -13,6 +13,7 @@ from .schema import (
     ALIBABA_SCHEMA,
     ASSETS_SCHEMA,
     BATCH_SCHEMA,
+    DELIVERY_SCHEMA,
     GENERATION_SCHEMA,
     REFERENCE_FILES_SCHEMA,
     SCHEMA,
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
 
 # One database-scoped transaction lock preserves SQLite's serialized writers.
 WRITE_LOCK = 741938021
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 PRE_GENERATION_VERSION = 6
 
 
@@ -167,7 +168,7 @@ def initialize(database: Postgres) -> None:
         database (Postgres): Open connection owned and closed by the caller.
 
     Returns:
-        None: Version seven exists; existing orders and delivery state are preserved.
+        None: Version eight exists; existing orders and delivery state are preserved.
 
     Raises:
         RuntimeError: Schema statements or transaction completion fail.
@@ -184,9 +185,10 @@ def initialize(database: Postgres) -> None:
             "SELECT version FROM drawer_schema WHERE singleton=1"
         ).fetchone()
         if row is not None:
-            if row["version"] == PRE_GENERATION_VERSION:
+            if row["version"] in (PRE_GENERATION_VERSION, 7):
                 database.execute(GENERATION_SCHEMA)
-                database.execute("UPDATE drawer_schema SET version=7 WHERE singleton=1")
+                database.execute(DELIVERY_SCHEMA)
+                database.execute("UPDATE drawer_schema SET version=8 WHERE singleton=1")
                 return
             if row["version"] != SCHEMA_VERSION:
                 message = "Unsupported PostgreSQL schema; update Drawer Assistant."
@@ -209,6 +211,7 @@ def initialize(database: Postgres) -> None:
             ),
             BATCH_SCHEMA,
             GENERATION_SCHEMA,
+            DELIVERY_SCHEMA,
         )
         for declaration in declarations:
             for statement in declaration.split(";"):
