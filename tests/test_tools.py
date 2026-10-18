@@ -356,8 +356,11 @@ def test_install_preserves_data(tmp_path: Path) -> None:
     assert object_map(configuration["cron"])["wrap_response"] is False
     assert object_map(configuration["cron"])["mirror_delivery"] is True
     album_settings = object_map(object_map(configuration["telegram"])["extra"])
-    assert album_settings["drawer_complete_albums"] is True
-    assert album_settings["cron_continuable_surface"] == "in_channel"
+    assert album_settings == {
+        "drawer_complete_albums": True,
+        "drop_pending_on_cold_boot": False,
+        "cron_continuable_surface": "in_channel",
+    }
     display = object_map(configuration["display"])
     telegram = object_map(object_map(display["platforms"])["telegram"])
     assert telegram["memory_notifications"] == "off"

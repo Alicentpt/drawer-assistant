@@ -264,6 +264,7 @@ def configure_toolset(profile: Path, timezone: str = TIMEZONE) -> None:
         object_map(config.setdefault("telegram", {})).setdefault("extra", {})
     )
     telegram_extra["drawer_complete_albums"] = True
+    telegram_extra["drop_pending_on_cold_boot"] = False
     telegram_extra["cron_continuable_surface"] = "in_channel"
     temporary = config_file.with_suffix(".drawer.tmp")
     temporary.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
