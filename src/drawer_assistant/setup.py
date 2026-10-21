@@ -81,6 +81,15 @@ def configure(env_file: Path, profile: Path) -> None:
     gateway["standalone"] = False
     config["gateway"] = gateway
     config["telegram"] = policy(chat)
+    if not chat.startswith("-"):
+        mapping(config.setdefault("platforms", {}))["telegram"] = {
+            "home_channel": {
+                "platform": "telegram",
+                "chat_id": chat,
+                "user_id": chat,
+                "name": "Artist",
+            }
+        }
     configure_shared_sessions(profile.parent.parent)
     config.update(
         group_sessions_per_user=False, thread_sessions_per_user=False, timezone=TIMEZONE
@@ -102,6 +111,7 @@ def configure(env_file: Path, profile: Path) -> None:
         "TELEGRAM_ALLOW_ALL_USERS": "false",
         "GATEWAY_ALLOW_ALL_USERS": "false",
         "TELEGRAM_ALLOWED_CHATS": chat,
+        "TELEGRAM_HOME_CHANNEL": chat,
         "TELEGRAM_GROUP_ALLOWED_CHATS": chat if chat.startswith("-") else "",
         "TELEGRAM_GUEST_MODE": "false",
         "TELEGRAM_REQUIRE_MENTION": "true" if chat.startswith("-") else "false",

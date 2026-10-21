@@ -53,6 +53,12 @@ def test_private_setup(tmp_path: Path) -> None:
     values = dotenv_values(profile / ".env")
     assert values["TELEGRAM_ALLOWED_USERS"] == "12345"
     assert values["DRAWER_TELEGRAM_MODE"] == "private"
+    assert (
+        mapping(mapping(mapping(config["platforms"])["telegram"])["home_channel"])[
+            "chat_id"
+        ]
+        == "12345"
+    )
 
 
 @pytest.mark.parametrize(
