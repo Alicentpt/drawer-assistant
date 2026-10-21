@@ -1,0 +1,66 @@
+--- a/nodes.py
++++ b/nodes.py
+@@ -442,7 +442,8 @@
+         inner_dim = ip_adapter["inner_dim"]
+         device = torch.device("cuda")
+ 
+-        model_dtype = next(patched_model.model.diffusion_model.parameters()).dtype
++        model_dtype = (patched_model.model.manual_cast_dtype or
++                       next(patched_model.model.diffusion_model.parameters()).dtype)
+         use_shared = ip_adapter.get("use_shared_projection", False)
+         ip_norm_keys = ip_adapter.get("ip_norm_keys", False)
+         ip_inject_before_mlp = ip_adapter.get("ip_inject_before_mlp", False)
+@@ -558,38 +559,27 @@
+                             device=block_params[pname].device,
+                         ))
+ 
+-        # ── Install / restore LoRA wrappers on cross-attention layers ──
++        # Register LoRA deltas on this ModelPatcher, never mutate shared layers.
++        # Permanent _LoRALinear wrappers leak into later disabled/baseline jobs
++        # and hide cross-attention keys from other ComfyUI LoRA loaders.
+         lora_weights = ip_adapter.get("lora_weights", {})
+         lora_rank = ip_adapter.get("lora_rank", 0)
+-        dit = patched_model.model.diffusion_model
+-        _lora_attrs = ("q_proj", "k_proj", "v_proj", "output_proj")
+         if use_lora and lora_weights and lora_rank:
+-            alpha = lora_rank
+-            scale = alpha / lora_rank
++            import comfy.lora
++            lora_sd = {}
+             for bi, layers in lora_weights.items():
+-                if bi >= len(dit.blocks):
+-                    continue
+-                block = dit.blocks[bi]
+                 for ln, ab_dict in layers.items():
+                     if "A" not in ab_dict or "B" not in ab_dict:
+-                        continue
+-                    original = getattr(block.cross_attn, ln, None)
+-                    if original is None or isinstance(original, _LoRALinear):
+-                        continue
+-                    wrapper = _LoRALinear(original, ab_dict["A"], ab_dict["B"], scale)
+-                    setattr(block.cross_attn, ln, wrapper)
+-            print(f"[AnimaIPAdapter] LoRA installed on {len(lora_weights)} blocks")
+-        else:
+-            # Unwrap any previously installed LoRA → restore original layers
+-            _unwrapped = 0
+-            for _blk in dit.blocks:
+-                for _ln in _lora_attrs:
+-                    _mod = getattr(_blk.cross_attn, _ln, None)
+-                    if isinstance(_mod, _LoRALinear):
+-                        setattr(_blk.cross_attn, _ln, _mod.base)
+-                        _unwrapped += 1
+-            if _unwrapped:
+-                print(f"[AnimaIPAdapter] LoRA unwrapped on {_unwrapped} layers")
++                        raise RuntimeError("Incomplete Anima IP-Adapter LoRA pair")
++                    prefix = f"diffusion_model.blocks.{bi}.cross_attn.{ln}"
++                    lora_sd[prefix + ".lora_A.weight"] = ab_dict["A"]
++                    lora_sd[prefix + ".lora_B.weight"] = ab_dict["B"]
++            mapping = comfy.lora.model_lora_keys_unet(patched_model.model)
++            patches = comfy.lora.load_lora(lora_sd, mapping)
++            if len(patches) != len(lora_sd) // 2:
++                raise RuntimeError("Anima IP-Adapter LoRA does not match this model")
++            patched_model.add_patches(patches, 1.0)
++            print(f"[AnimaIPAdapter] Isolated LoRA patches: {len(patches)}")
+ 
+         # ── Monkey-patch block forward for IP cross-attention ──
+         # Each DiT block's forward is replaced so that after the original

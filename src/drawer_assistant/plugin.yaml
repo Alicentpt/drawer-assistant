@@ -1,0 +1,18 @@
+name: drawer
+version: "0.1.0"
+description: Jessica — orders, deadlines, references and model-specific image tools.
+python_dependencies:
+  - "psycopg[binary]>=3.3.6,<4"
+  - "tzdata>=2025.3,<2027"
+  # Hermes pins 1.2.2; the plugin only uses the dotenv_values API available there.
+  - "python-dotenv>=1.2.2,<2"
+provides_tools:
+  - drawer_persona
+  - drawer_orders
+  - drawer_references
+  - drawer_anima
+  - drawer_stages
+  - drawer_order_info
+  - drawer_image_sheet
+  - drawer_order_digest
+  - drawer_anima_batch

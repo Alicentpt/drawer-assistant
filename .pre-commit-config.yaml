@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: checks
+        name: Python static checks
+        entry: uv run --no-sync poe check
+        language: system
+        pass_filenames: false
+        always_run: true

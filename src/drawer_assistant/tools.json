@@ -1,0 +1,382 @@
+{
+  "drawer_persona": {
+    "name": "drawer_persona",
+    "description": "Read the current SOUL.md from this bot's installed Hermes profile. Use when asked to show your persona, identity instructions or persona file. Returns its exact text and profile, separately from conversation memory. Read-only; takes no paths or arguments and cannot modify files. Workflow instructions: skill_view(\"drawer-profile\").",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  "drawer_orders": {
+    "name": "drawer_orders",
+    "description": "Persistent orders and deadlines. List before updating an order. create requires id/title; update requires id. Dates use ISO 8601 with offset and timezone. A due change replaces the old reminder; reminder defaults to due unless explicitly provided, empty clears. done/cancelled suppress reminders. Stable create ids prevent duplicate retries. Results include delivery attempts/error state. Workflow instructions: skill_view(\"drawer-orders\"). Use remind_at and the installed worker; never create another cron job. brief stores the client specification; comments is free commentary; priority is 1 low, 2 medium (default), 3 high. Stages belong to drawer_stages, never separate orders. Use drawer_order_info for a ready-to-send order card. Moscow is the default timezone; display dates with AM/PM. Updating priority alone must send only action, id and priority; preserve timezone, due, remind_at and notes. Europe/Moscow is intentional, not a broken setting. Never infer schema from old conversation.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Operation",
+          "enum": [
+            "list",
+            "create",
+            "update"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable order id, 1-64 letters/digits/_/-"
+        },
+        "title": {
+          "type": "string",
+          "description": "Short order/task title"
+        },
+        "client": {
+          "type": "string",
+          "description": "Client name if supplied"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Brief, scope, price and agreed details as supplied"
+        },
+        "status": {
+          "type": "string",
+          "description": "Lifecycle",
+          "enum": [
+            "open",
+            "done",
+            "cancelled"
+          ]
+        },
+        "due": {
+          "type": "string",
+          "description": "Deadline ISO 8601 with zone offset; empty clears"
+        },
+        "timezone": {
+          "type": "string",
+          "description": "IANA timezone, default Europe/Moscow (+03:00); display in Moscow AM/PM"
+        },
+        "remind_at": {
+          "type": "string",
+          "description": "Reminder ISO timestamp with offset; empty disables"
+        },
+        "brief": {
+          "type": "string",
+          "description": "Full client specification / ТЗ, up to 4000 characters"
+        },
+        "comments": {
+          "type": "string",
+          "description": "Free-form order comments, up to 4000 characters"
+        },
+        "priority": {
+          "type": "string",
+          "description": "Numeric priority as a string: 1 low, 2 medium (default), 3 high",
+          "enum": [
+            "1",
+            "2",
+            "3"
+          ]
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_references": {
+    "name": "drawer_references",
+    "description": "Persistent references linked to orders. save imports exact image bytes into SQLite from file (Telegram attachment cache or generation result) OR image_url (direct HTTP/S image); PNG/JPEG/WebP/GIF up to 20 MiB. New save requires id/title and an image or source url. url alone stores only a link, never image bytes. Omitted metadata and existing binary are preserved on update. storage=blob confirms durable binary storage; link_only does not. list returns metadata, optional order_id filter. get(id) restores an image from SQLite and returns file plus MEDIA marker for sending or explicitly requested generation. No Base64 in responses. Workflow instructions: skill_view(\"drawer-references\"). Save EVERY album attachment with a separate id; report saved/received counts.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Operation",
+          "enum": [
+            "list",
+            "save",
+            "get"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable reference id, 1-64 letters/digits/_/-"
+        },
+        "title": {
+          "type": "string",
+          "description": "Reference title"
+        },
+        "url": {
+          "type": "string",
+          "description": "Optional source HTTP(S) page URL; provenance only, not downloaded. Can be omitted for file. Defaults to image_url when supplied."
+        },
+        "order_id": {
+          "type": "string",
+          "description": "Existing order id, or empty for general reference"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Why this reference helps: pose, palette, lighting, etc."
+        },
+        "file": {
+          "type": "string",
+          "description": "Absolute local image path from the received Telegram attachment or selected generation. save copies actual bytes into SQLite before confirming success. Mutually exclusive with image_url."
+        },
+        "image_url": {
+          "type": "string",
+          "description": "Direct HTTP(S) image URL to download and store as binary, not a page. Mutually exclusive with file. Never use Telegram token-bearing API URLs; use the cached attachment path."
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_anima": {
+    "name": "drawer_anima",
+    "description": "Single image only. For multiple images, variants or panels (e.g. 4x4) use drawer_anima_batch with one prompt per frame. Nova Anime AM v2.0 (Anima) with Qwen3 0.6B Base only. GPU-only text-to-image, 512x512, one image, 25 steps, CFG 5. Code prepends the agreed quality/scenery prefix once and applies the fixed negative; pass only the scene, without Prompt: labels. start with stable id/prompt, then status with the same tool/id. Return MEDIA and generation_seconds. Never resubmit uncertain submitting jobs. No reference images or editing. Workflow instructions: skill_view(\"drawer-anima\"). Status waits up to 25 seconds with 5-second polling intervals; maximum three status calls per image per turn, then report pending and stop. Do not bypass loop guardrails with a new job id.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Operation",
+          "enum": [
+            "start",
+            "status"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable generation request id"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Image prompt, 1-4000 characters"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_stages": {
+    "name": "drawer_stages",
+    "description": "Persistent nested stages INSIDE an order. create requires order_id/id/title; update patches only supplied fields. parent_id nests within the same order; empty is root. list returns the entire tree including done stages and image metadata. attach requires id/reference_id: first save the actual image with drawer_references to this order; links alone are rejected. Completion preserves images/descriptions and records completed_at. Retries reuse ids. Never split stages into separate orders. Workflow: skill_view(\"drawer-orders\").",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "create",
+            "update",
+            "list",
+            "attach"
+          ]
+        },
+        "order_id": {
+          "type": "string",
+          "description": "Existing order id"
+        },
+        "id": {
+          "type": "string",
+          "description": "Stage id unique inside this order, 1..64 letters/digits/_/-"
+        },
+        "title": {
+          "type": "string",
+          "description": "Stage title"
+        },
+        "parent_id": {
+          "type": "string",
+          "description": "Existing parent stage id in this order; empty for root"
+        },
+        "description": {
+          "type": "string",
+          "description": "Work/result description or received client feedback"
+        },
+        "comments": {
+          "type": "string",
+          "description": "Free-form stage comments"
+        },
+        "status": {
+          "type": "string",
+          "description": "Stage lifecycle",
+          "enum": [
+            "pending",
+            "in_progress",
+            "blocked",
+            "done",
+            "cancelled"
+          ]
+        },
+        "due": {
+          "type": "string",
+          "description": "Optional stage deadline ISO 8601 with offset; defaults to no deadline; empty clears"
+        },
+        "position": {
+          "type": "string",
+          "description": "Display sequence 0..999999 as string, default 0"
+        },
+        "reference_id": {
+          "type": "string",
+          "description": "Saved binary reference belonging to this order"
+        }
+      },
+      "required": [
+        "action",
+        "order_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_order_info": {
+    "name": "drawer_order_info",
+    "description": "Read-only complete order information with brief, priority, comments, nested completed/pending stages and image metadata. Returns result.text: the exact ready-to-send Jessica card. Reply with that text without rewriting its template. Does not send Telegram messages itself. To show an attached image use drawer_references get(id). Read the order list if the requested order is ambiguous.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Existing order id"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_image_sheet": {
+    "name": "drawer_image_sheet",
+    "description": "Assemble existing local images into a PNG grid with ImageMagick on this host, no GPU or generation. Works independently of orders. Preserve input order and originals; fit each image without cropping. Returns file, MEDIA, image_count and assembly_seconds. For multi-panel generation first generate each frame separately via drawer_anima and wait for completion; pass actual returned local file paths. Optional labels are rendered by ImageMagick, not Anima. Instructions: skill_view(\"drawer-images\").",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 16,
+          "description": "Absolute local PNG/JPEG/WebP paths in display order, up to 20 MiB each. Use completed generations, received attachments or drawer_references get."
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 3,
+          "description": "Grid columns; rows follow image count."
+        },
+        "cell_size": {
+          "type": "integer",
+          "minimum": 128,
+          "maximum": 1024,
+          "default": 512,
+          "description": "Square image bounding box in pixels; fit without cropping. Does not add detail."
+        },
+        "gap": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64,
+          "default": 16,
+          "description": "White spacing per tile side in pixels."
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "maxItems": 16,
+          "description": "Optional one-line caption per image, matching files count/order. No percent or at signs."
+        }
+      },
+      "required": [
+        "files"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "drawer_order_digest": {
+    "name": "drawer_order_digest",
+    "description": "Read-only snapshot for a daily order review: active deadlines in the next seven days PLUS all overdue open orders; completed upcoming orders; undated open orders; nested stage statuses. Times are Moscow AM/PM. suggested_priority is advice only; no priority is changed. Urgent = overdue or due within two days. Missing stages means progress is unknown. Use drawer-order-review skill to form the final review. No arguments.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "drawer_anima_batch": {
+    "name": "drawer_anima_batch",
+    "description": "Generate MULTIPLE independent Anima images and automatically assemble the full grid. Use for N variants, panels, contact sheets and 4x4/2x2 requests. start requires stable id and prompts ARRAY with one complete scene per image, not one grid prompt; optional columns/labels/cell_size/gap. status needs only action/id and waits up to 25s with internal pauses. Preserves progress across restarts; repeat start with identical spec does not duplicate jobs. Never resubmit uncertain children. Returns expected_images/completed_images, per-frame generation_seconds and final MEDIA plus assembly_seconds only when ALL frames succeed. If progress increases, continue status; after three unchanged checks report pending and stop. Instructions: skill_view(\"drawer-images\").",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "start",
+            "status"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable batch id, 1..48 letters/digits/_/-"
+        },
+        "prompts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "minItems": 2,
+          "maxItems": 16,
+          "description": "On start: one complete single-frame prompt per image. For 4x4 pass SIXTEEN prompts and columns=4. For 3x1 pass THREE prompts and columns=3. No grid/panel lists inside individual prompts."
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 3,
+          "description": "Grid columns; rows follow image count."
+        },
+        "cell_size": {
+          "type": "integer",
+          "minimum": 128,
+          "maximum": 1024,
+          "default": 512,
+          "description": "Square image bounding box in pixels; fit without cropping. Does not add detail."
+        },
+        "gap": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64,
+          "default": 16,
+          "description": "White spacing per tile side in pixels."
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "maxItems": 16,
+          "description": "Optional one-line caption per image, matching prompts count/order. No percent or at signs."
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

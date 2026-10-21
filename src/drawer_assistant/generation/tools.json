@@ -1,0 +1,637 @@
+{
+  "anima_generate": {
+    "description": "Generate one Nova Anime AM v2.0 image from text. Defaults: 512x512, CFG7, 45 steps, res_multistep/simple, denoise1. Every reference stretched without padding/cropping before encoding. options can override positive_prefix and negative_prompt (including empty), remove conflicts with requested style. Use anima_batch for variants/panels. Returns request_id and delivery.automatic. When true, a background worker sends the result: do not poll in a loop or send duplicate MEDIA. When false, use generation_status. Never resubmit uncertain jobs. Read drawer-anima and drawer-anima-controls skills.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "maxLength": 4000,
+          "minLength": 1
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "width": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 768
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 768
+            },
+            "steps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "cfg": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "sampler": {
+              "enum": [
+                "res_multistep",
+                "euler_ancestral",
+                "er_sde"
+              ]
+            },
+            "scheduler": {
+              "enum": [
+                "simple"
+              ]
+            },
+            "denoise": {
+              "type": "number",
+              "minimum": 0.01,
+              "maximum": 1
+            },
+            "shift": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "strength": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "start_percent": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "end_percent": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "positive_prefix": {
+              "type": "string",
+              "maxLength": 4000
+            },
+            "negative_prompt": {
+              "type": "string",
+              "maxLength": 4000
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "maxItems": 1
+        },
+        "request_id": {
+          "type": "string",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_-]{1,48}$"
+        }
+      },
+      "required": [
+        "prompt",
+        "request_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "anima_style": {
+    "description": "Generate using a style reference. strength defaults 0.65; near/above 1 copies scene composition too. Describe style in English. Defaults: 512x512, CFG7, 45 steps, res_multistep/simple, denoise1. Every reference stretched without padding/cropping before encoding. options can override positive_prefix and negative_prompt (including empty), remove conflicts with requested style. Use anima_batch for variants/panels. Returns request_id and delivery.automatic. When true, a background worker sends the result: do not poll in a loop or send duplicate MEDIA. When false, use generation_status. Never resubmit uncertain jobs. Read drawer-anima and drawer-anima-controls skills.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "maxLength": 4000,
+          "minLength": 1
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "width": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 768
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 768
+            },
+            "steps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "cfg": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "sampler": {
+              "enum": [
+                "res_multistep",
+                "euler_ancestral",
+                "er_sde"
+              ]
+            },
+            "scheduler": {
+              "enum": [
+                "simple"
+              ]
+            },
+            "denoise": {
+              "type": "number",
+              "minimum": 0.01,
+              "maximum": 1
+            },
+            "shift": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "strength": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "start_percent": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "end_percent": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "positive_prefix": {
+              "type": "string",
+              "maxLength": 4000
+            },
+            "negative_prompt": {
+              "type": "string",
+              "maxLength": 4000
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "maxItems": 1
+        },
+        "request_id": {
+          "type": "string",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_-]{1,48}$"
+        }
+      },
+      "required": [
+        "prompt",
+        "request_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "anima_depth": {
+    "description": "Generate using estimated reference depth for composition and approximate pose. strength 1, start_percent 0, end_percent 0.6. Returns exact depth map and application window; window changes denoising steps, not map pixels. Defaults: 512x512, CFG7, 45 steps, res_multistep/simple, denoise1. Every reference stretched without padding/cropping before encoding. options can override positive_prefix and negative_prompt (including empty), remove conflicts with requested style. Use anima_batch for variants/panels. Returns request_id and delivery.automatic. When true, a background worker sends the result: do not poll in a loop or send duplicate MEDIA. When false, use generation_status. Never resubmit uncertain jobs. Read drawer-anima and drawer-anima-controls skills.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "maxLength": 4000,
+          "minLength": 1
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "width": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 768
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 768
+            },
+            "steps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "cfg": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "sampler": {
+              "enum": [
+                "res_multistep",
+                "euler_ancestral",
+                "er_sde"
+              ]
+            },
+            "scheduler": {
+              "enum": [
+                "simple"
+              ]
+            },
+            "denoise": {
+              "type": "number",
+              "minimum": 0.01,
+              "maximum": 1
+            },
+            "shift": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "strength": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "start_percent": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "end_percent": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "positive_prefix": {
+              "type": "string",
+              "maxLength": 4000
+            },
+            "negative_prompt": {
+              "type": "string",
+              "maxLength": 4000
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "maxItems": 1
+        },
+        "request_id": {
+          "type": "string",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_-]{1,48}$"
+        }
+      },
+      "required": [
+        "prompt",
+        "request_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "anima_batch": {
+    "description": "Generate 2..16 separate frames sequentially on GPU, then optionally assemble. One mode per batch. Each frame inherits defaults/references and may override ALL generation options and references independently. Use per-frame strength/seed/CFG/windows for comparisons. Stable request_id. If delivery.automatic=true, the worker advances all frames and sends the final collage/files; do not send duplicate MEDIA or ask the user to check. Local jobs without routing need generation_status. Read drawer-images.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_-]{1,48}$"
+        },
+        "mode": {
+          "enum": [
+            "text",
+            "style",
+            "depth"
+          ]
+        },
+        "defaults": {
+          "type": "object",
+          "properties": {
+            "width": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 768
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 768
+            },
+            "steps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "cfg": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "sampler": {
+              "enum": [
+                "res_multistep",
+                "euler_ancestral",
+                "er_sde"
+              ]
+            },
+            "scheduler": {
+              "enum": [
+                "simple"
+              ]
+            },
+            "denoise": {
+              "type": "number",
+              "minimum": 0.01,
+              "maximum": 1
+            },
+            "shift": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "strength": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "start_percent": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "end_percent": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "positive_prefix": {
+              "type": "string",
+              "maxLength": 4000
+            },
+            "negative_prompt": {
+              "type": "string",
+              "maxLength": 4000
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "maxItems": 1
+        },
+        "frames": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "maxLength": 4000,
+                "minLength": 1
+              },
+              "options": {
+                "type": "object",
+                "properties": {
+                  "width": {
+                    "type": "integer",
+                    "minimum": 256,
+                    "maximum": 768
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 256,
+                    "maximum": 768
+                  },
+                  "steps": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                  },
+                  "cfg": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 15
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "sampler": {
+                    "enum": [
+                      "res_multistep",
+                      "euler_ancestral",
+                      "er_sde"
+                    ]
+                  },
+                  "scheduler": {
+                    "enum": [
+                      "simple"
+                    ]
+                  },
+                  "denoise": {
+                    "type": "number",
+                    "minimum": 0.01,
+                    "maximum": 1
+                  },
+                  "shift": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "strength": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3
+                  },
+                  "start_percent": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "end_percent": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "positive_prefix": {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  "negative_prompt": {
+                    "type": "string",
+                    "maxLength": 4000
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "references": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "maxItems": 1
+              }
+            },
+            "required": [
+              "prompt"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 2,
+          "maxItems": 16
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "cell_size": {
+          "type": "integer",
+          "minimum": 128,
+          "maximum": 1024
+        },
+        "gap": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "maxItems": 16
+        },
+        "assemble": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "request_id",
+        "mode",
+        "frames"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "generation_status": {
+    "description": "Read a known task/batch. Routed automatic jobs return persisted progress and delivery state immediately; the worker advances and delivers them after the turn. Do not send duplicate MEDIA when delivery.automatic=true. Local jobs poll/download and advance for up to 25 seconds; stop after 3 unchanged checks. Unknown delivery outcomes require inspection, never an automatic resend. Never replace uncertain IDs.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_-]{1,64}$"
+        }
+      },
+      "required": [
+        "request_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "generation_health": {
+    "description": "Read-only GPU-only, node/model/sampler readiness by mode. Missing controls do not disable text generation. No GPU job is submitted.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "image_sheet": {
+    "description": "Assemble 1..16 existing local images with ImageMagick; no generation. Preserve originals/input order. labels optional, no %/@/newlines. Returns local PNG and MEDIA.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "minItems": 1,
+          "maxItems": 16
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "cell_size": {
+          "type": "integer",
+          "minimum": 128,
+          "maximum": 1024
+        },
+        "gap": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "maxItems": 16
+        }
+      },
+      "required": [
+        "files"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

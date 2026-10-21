@@ -1,0 +1,68 @@
+{
+  "style": {
+    "revision": "6b77cd0c367d76402174ace2be50d3cb6aa77855",
+    "patch_source_sha256": "521ce9082fa803419851820f4768fb550c0bc0f334c8d1d08199111920fd77be",
+    "previous_patch_sha256": "01952399048cae69b790da57c23705a0544143a6f3d6ef14bcb725c472acfbab",
+    "patched_sha256": "7a1d62a3d9bb42caede6a4c85c2fb04f8612f9b4187b05b108550c4e4d6c15ed"
+  },
+  "depth": {
+    "revision": "6b57b395f948c5a8ccc16268f1f02efeab523026",
+    "patch_source_sha256": "f93b66bdbb097f5c81e82aff2a3471bfa9e2adccc5f232822f92fb3515b935ac",
+    "previous_patch_sha256": "c8e0e63a70c34eea2d1319a8f80b465d74401f316df09c0a8966da2e22c2d6fe",
+    "patched_sha256": "4f6a55b144a47c3bdbc6aa457d360967e789b830302e5f87447b247cdf8b355f"
+  },
+  "preprocessors": {
+    "revision": "a587a4c1594524c1d2de5cd1a86cd868ff448e1c"
+  },
+  "style_weights": {
+    "revision": "99e9c351c9f00bdd188b5added0066a80d3b1de6",
+    "files": [
+      ".gitattributes",
+      "README.md",
+      "ip_adapter-Character_Reference-10.safetensors"
+    ]
+  },
+  "depth_weights": {
+    "revision": "4ffaa3cf5854d5eac5b13447e043d2a8ff2cc4e7",
+    "files": [
+      ".gitattributes",
+      "LICENSE.md",
+      "README.md",
+      "anima-vace-depth.safetensors"
+    ]
+  },
+  "siglip": {
+    "revision": "a89f5c5093f902bf39d3cd4d81d2c09867f0724b",
+    "files": [
+      ".gitattributes",
+      "README.md",
+      "config.json",
+      "model.safetensors",
+      "preprocessor_config.json",
+      "special_tokens_map.json",
+      "tokenizer.json",
+      "tokenizer.model",
+      "tokenizer_config.json"
+    ]
+  },
+  "base_weights": [
+    {
+      "repo": "Kutches/Anim4",
+      "revision": "42ca138165c9f53115212f678dc047d3880fc422",
+      "file": "novaAnimeAM_v20.safetensors",
+      "size": 4182238320
+    },
+    {
+      "repo": "circlestone-labs/Anima",
+      "revision": "f973fc41ec7545364ac9776c2440285f43ff2a30",
+      "file": "split_files/text_encoders/qwen_3_06b_base.safetensors",
+      "size": 1192135096
+    },
+    {
+      "repo": "circlestone-labs/Anima",
+      "revision": "f973fc41ec7545364ac9776c2440285f43ff2a30",
+      "file": "split_files/vae/qwen_image_vae.safetensors",
+      "size": 253806246
+    }
+  ]
+}

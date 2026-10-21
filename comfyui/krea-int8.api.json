@@ -1,0 +1,11 @@
+{
+  "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "krea2_cat_tower_turbo_int8mixedrow_v1.0.safetensors", "weight_dtype": "default"}},
+  "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "Huihui-Qwen3-VL-4B-Instruct-abliterated-int8_convrot.safetensors", "type": "krea2", "device": "default"}},
+  "3": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_vae.safetensors"}},
+  "4": {"class_type": "CLIPTextEncode", "inputs": {"text": "Character design reference, a 30-year-old female explorer in a fully closed blue coat, boots and a large backpack, holding a paper map. Clear full-body silhouette, three-quarter view, plain light background, loose painterly anime concept sketch, muted colors.", "clip": ["2", 0]}},
+  "5": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["4", 0]}},
+  "6": {"class_type": "EmptyLatentImage", "inputs": {"width": 1024, "height": 1024, "batch_size": 1}},
+  "7": {"class_type": "KSampler", "inputs": {"model": ["1", 0], "positive": ["4", 0], "negative": ["5", 0], "latent_image": ["6", 0], "seed": 42, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0}},
+  "8": {"class_type": "VAEDecodeTiled", "inputs": {"samples": ["7", 0], "vae": ["3", 0], "tile_size": 512, "overlap": 64, "temporal_size": 64, "temporal_overlap": 8}},
+  "9": {"class_type": "SaveImage", "inputs": {"images": ["8", 0], "filename_prefix": "drawer_krea-int8"}}
+}

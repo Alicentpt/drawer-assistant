@@ -1,0 +1,13 @@
+--- a/detect.py
++++ b/detect.py
+@@ -108,6 +108,9 @@
+     if _POSE is None:
+         _ensure_models()
+         from rtmlib import Wholebody
+-        _POSE = Wholebody(to_openpose=False, mode="balanced", backend="onnxruntime", device="cpu")
++        import onnxruntime
++        if "CUDAExecutionProvider" not in onnxruntime.get_available_providers():
++            raise RuntimeError("Anima pose detection requires ONNX CUDA; CPU fallback is forbidden.")
++        _POSE = Wholebody(to_openpose=False, mode="balanced", backend="onnxruntime", device="cuda")
+     pose = _POSE
+     res = int(resolution)

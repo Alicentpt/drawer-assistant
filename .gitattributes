@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+# Unified diffs require a space prefix on empty context lines.
+*.patch whitespace=-blank-at-eol
