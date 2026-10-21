@@ -56,8 +56,10 @@
 - Не утверждаем, что бот или GPU-интеграция работают, пока не проверили их.
 - Gateway запускаем один на хосте, явно из `--profile default`, без `.env` проекта.
   Токен и правила Telegram записывает `uv run drawer-setup` в профиль помощницы.
-- Доступ бота разрешён только группе из `DRAWER_TELEGRAM_CHAT_ID`; личка закрыта.
-  Не заменяем ограничение группы списком `TELEGRAM_ALLOWED_USERS`.
+- Доступ задаётся DRAWER_TELEGRAM_MODE=group/private и одним числовым chat id.
+  Текущий рабочий режим — private: только личка художницы, другие DMs и группы
+  запрещены. Для private user grant совпадает с положительным chat id; group
+  сохраняет отрицательный id и закрытые DMs. Username не используем как grant.
 - В разрешённой группе/теме общая сессия участников, включая историю и /model.
   Для multiplex Hermes флаги group_sessions_per_user/thread_sessions_per_user=false
   нужны также в конфиге хоста; его исходник сохраняем. Это глобальный режим хоста.
@@ -166,7 +168,7 @@
   это рабочий каталог, а не файловая песочница ОС. Настройки защит Hermes сохраняем.
 
 - Автодоставка генераций: native pre_tool_call сохраняет только доверенный origin
-  разрешённой Telegram-группы в generation_deliveries до GPU POST. Worker без LLM
+  разрешённого Telegram-чата в generation_deliveries до GPU POST. Worker без LLM
   продолжает singles/batch, штатная cron.delivery_queue доставляет и зеркалит итог.
   Не создаём второй poller/LLM cron. Локальные и исторические задания без маршрута
   не рассылать. Проверяем lease/restart, backoff, неопределённую отправку и dedup.

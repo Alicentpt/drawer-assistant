@@ -21,6 +21,7 @@ from .alibaba_inputs import endpoint
 from .hermes_compat import patch_telegram
 from .image_sheet import magick_path
 from .network import object_map
+from .telegram_access import recipient
 from .time_display import TIMEZONE
 
 
@@ -396,10 +397,7 @@ def install(profile: Path, env_file: Path) -> None:
         )
         raise RuntimeError(message)
     install_files(profile, env_file)
-    chat = dotenv_values(profile / ".env").get("TELEGRAM_ALLOWED_CHATS") or ""
-    if not chat.startswith("-") or not chat[1:].isdigit():
-        message = "Daily review requires one permitted Telegram group."
-        raise ValueError(message)
+    chat = recipient(profile)
     commands = [
         ["plugins", "enable", "drawer"],
         [

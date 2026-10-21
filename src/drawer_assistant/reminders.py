@@ -15,6 +15,7 @@ from .database import configured_database
 from .messages import PRIORITIES
 from .network import api, object_map
 from .store import connect, read_orders
+from .telegram_access import recipient
 from .time_display import local_time
 
 if TYPE_CHECKING:
@@ -141,9 +142,9 @@ def tick(profile: Path) -> int:
     )
     credentials = dotenv_values(profile / ".env", interpolate=False)
     token = credentials.get("TELEGRAM_BOT_TOKEN") or ""
-    chat = credentials.get("TELEGRAM_ALLOWED_CHATS") or ""
-    if not re.fullmatch(r"-[1-9]\d*", chat) or not re.fullmatch(r"\d+:[\w-]+", token):
-        message = "A bot token and exactly one negative group id are required."
+    chat = recipient(profile)
+    if not re.fullmatch(r"\d+:[\w-]+", token):
+        message = "A bot token and one permitted Telegram chat are required."
         raise ValueError(message)
 
     def send(text: str) -> None:

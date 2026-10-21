@@ -6,6 +6,8 @@ import json
 from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
+import pytest
+
 from drawer_assistant import reminders
 from drawer_assistant.messages import paragraphs
 from drawer_assistant.network import object_map
@@ -13,8 +15,6 @@ from drawer_assistant.store import orders
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
 
 def test_brief_words_survive_layout() -> None:
@@ -35,14 +35,17 @@ def test_brief_words_survive_layout() -> None:
     assert "\\*holding hands\\*" in rendered
 
 
+@pytest.mark.parametrize(("chat", "mode"), [("-100123", "group"), ("12345", "private")])
 def test_html_reminder_delivery(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, chat: str, mode: str
 ) -> None:
     """Send readable reminders as escaped HTML without changing their delivery state.
 
     Args:
         tmp_path (Path): Isolated profile, credentials and database directory.
         monkeypatch (pytest.MonkeyPatch): Replaces Telegram HTTP with an acknowledgment.
+        chat (str): Expected group or private destination.
+        mode (str): Explicit mode matching the numeric id.
 
     Returns:
         None: The group receives one safe HTML payload and the send is recorded once.
@@ -71,7 +74,10 @@ def test_html_reminder_delivery(
     plugin.mkdir(parents=True)
     (plugin / "settings.json").write_text(json.dumps({"database": str(path)}), "utf-8")
     (tmp_path / ".env").write_text(
-        "TELEGRAM_BOT_TOKEN=123:fixture\nTELEGRAM_ALLOWED_CHATS=-100123\n", "utf-8"
+        f"TELEGRAM_BOT_TOKEN=123:fixture\nTELEGRAM_ALLOWED_CHATS={chat}\n"
+        f"DRAWER_TELEGRAM_MODE={mode}\n"
+        f"TELEGRAM_ALLOWED_USERS={chat if mode == 'private' else ''}\n",
+        "utf-8",
     )
     transport = Mock(return_value={"ok": True})
     monkeypatch.setattr(reminders, "api", transport)
@@ -79,7 +85,7 @@ def test_html_reminder_delivery(
     payload = object_map(transport.call_args.args[1])
     text = str(payload["text"])
     assert payload["parse_mode"] == "HTML"
-    assert payload["chat_id"] == "-100123"
+    assert payload["chat_id"] == chat
     assert "<script>" not in text
     assert "&lt;script&gt; &amp; &quot;witches&quot;" in text
     assert "\n\n<b>Дедлайн</b>\n01.01.2000 6:00 PM" in text

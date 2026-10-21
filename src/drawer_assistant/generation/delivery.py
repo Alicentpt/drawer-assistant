@@ -7,11 +7,10 @@ import re
 from time import time
 from typing import TYPE_CHECKING
 
-from dotenv import dotenv_values
-
 from drawer_assistant.database import configured_database
 from drawer_assistant.network import object_map
 from drawer_assistant.store import transaction
+from drawer_assistant.telegram_access import recipient
 
 from .presets import canonical
 
@@ -62,16 +61,14 @@ def capture(
         return
     if origin.get("platform") != "telegram":
         return
-    allowed = dotenv_values(
-        settings_file.parents[2] / ".env", interpolate=False, encoding="utf-8-sig"
-    ).get("TELEGRAM_ALLOWED_CHATS", "")
+    allowed = recipient(settings_file.parents[2])
     identifier = str(arguments.get("request_id", ""))
     if (
-        not re.fullmatch(r"-[1-9]\d*", allowed or "")
-        or origin.get("chat_id") != allowed
+        origin.get("chat_id") != allowed
+        or (not allowed.startswith("-") and origin.get("user_id") != allowed)
         or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", identifier)
     ):
-        message = "Automatic generation delivery requires the configured group and id."
+        message = "Automatic generation delivery requires the configured chat and id."
         raise ValueError(message)
     path = configured_database(settings_file, settings)
     with transaction(path) as database:

@@ -73,19 +73,25 @@ class ReceiptQueue:  # pylint: disable=too-few-public-methods
     Attributes:
         messages (dict[str, str]): First payload per execution id.
         status (str): Disposition returned by subsequent enqueue acknowledgements.
+        chat_id (str): Sole expected private or group destination.
     """  # noqa: DOC302 - Repository requires constructor Returns documentation.
 
     messages: dict[str, str]
     status: str
+    chat_id: str
 
-    def __init__(self) -> None:
+    def __init__(self, chat_id: str = "-12345") -> None:
         """Initialize an isolated in-memory receipt store.
+
+        Args:
+            chat_id (str, default="-12345"): Expected destination, never contacted.
 
         Returns:
             None: No network connection or delivery is created.
         """  # noqa: DOC303 - Repository requires constructor Returns documentation.
         self.messages = {}
         self.status = "pending"
+        self.chat_id = chat_id
 
     def enqueue(
         self, execution_id: str, job: dict[str, object], content: str
@@ -103,7 +109,7 @@ class ReceiptQueue:  # pylint: disable=too-few-public-methods
         Raises:
             AssertionError: Destination or idempotent payload changes.
         """  # noqa: DOC502 - Assertions may fail.
-        assert object_map(job["origin"])["chat_id"] == "-12345"
+        assert object_map(job["origin"])["chat_id"] == self.chat_id
         assert self.messages.setdefault(execution_id, content) == content
         return {"status": self.status}
 
@@ -247,7 +253,7 @@ def test_route_restriction(settings: Path) -> None:
     """  # noqa: DOC502 - Real capture/storage operations are exercised.
     params: dict[str, object] = {"request_id": "routed"}
     path = route(settings, "anima_generate", params)
-    with pytest.raises(ValueError, match="configured group"):
+    with pytest.raises(ValueError, match="configured chat"):
         capture(
             settings,
             "mcp__drawer_generation__anima_generate",
@@ -293,6 +299,53 @@ def test_worker_lease(settings: Path) -> None:
         results = [future.result() for future in futures]
     assert sum(row is not None for row in results) == 1
     assert claim(path, "replacement", clock + 601) is not None
+
+
+def test_private_generation_delivery(
+    settings: Path, fake_server: list[dict[str, object]]
+) -> None:
+    """Route new private work to the artist while blocking old group delivery.
+
+    Args:
+        settings (Path): Disposable profile and database configuration.
+        fake_server (list[dict[str, object]]): Mock GPU submission records.
+
+    Returns:
+        None: Only the allowlisted private user receives the new result.
+
+    Raises:
+        AssertionError: A group or another user receives automatic output.
+        OSError: Fixture files cannot be written.
+        ValueError: Fixture or storage data is invalid.
+        KeyError: Expected state is absent.
+        RuntimeError: Mock backend or storage fails.
+        TypeError: Fixture cannot be serialized.
+        sqlite3.Error: SQLite operations fail.
+        jsonschema.ValidationError: Fixture violates the published schema.
+    """  # noqa: DOC502 - Real worker/service/storage operations are exercised.
+    path = route(settings, "anima_generate", {"request_id": "old-group"})
+    (settings.parents[2] / ".env").write_text(
+        "DRAWER_TELEGRAM_MODE=private\nTELEGRAM_ALLOWED_CHATS=12345\n"
+        "TELEGRAM_ALLOWED_USERS=12345\n",
+        "utf-8",
+    )
+    params: dict[str, object] = {"request_id": "private-image", "prompt": "a forest"}
+    origin = {"platform": "telegram", "chat_id": "12345", "user_id": "12345"}
+    capture(settings, "mcp__drawer_generation__anima_generate", params, origin)
+    with pytest.raises(ValueError, match="configured chat"):
+        capture(
+            settings,
+            "mcp__drawer_generation__anima_generate",
+            params,
+            {**origin, "user_id": "99999"},
+        )
+    invoke(settings, "anima_generate", params)
+    native = ReceiptQueue("12345")
+    clock = time()
+    assert tick(settings, native, clock)
+    assert information(path, "old-group")["state"] == "blocked"
+    assert tick(settings, native, clock + 1)
+    assert len(native.messages) == len(fake_server) == 1
 
 
 def test_worker_offline(

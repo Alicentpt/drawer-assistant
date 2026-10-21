@@ -13,6 +13,7 @@ import yaml
 from dotenv import dotenv_values, set_key
 
 from .installation import install
+from .telegram_access import policy, validate_chat
 from .time_display import TIMEZONE
 
 
@@ -40,7 +41,7 @@ def mapping(value: object) -> dict[str, object]:
 
 
 def configure(env_file: Path, profile: Path) -> None:
-    """Restrict Telegram to one group and copy its token into an existing profile.
+    """Restrict Telegram to one group or private user in an existing profile.
 
     Preserve OAuth, optionally select OpenRouter, and back up the config once. Share
     group sessions on the host and profile; replace legacy Telegram settings.
@@ -48,7 +49,7 @@ def configure(env_file: Path, profile: Path) -> None:
     enables unrestricted use.
 
     Args:
-        env_file (Path): UTF-8 dotenv file with bot token and negative group ID.
+        env_file (Path): UTF-8 dotenv with token, numeric id and optional mode.
         profile (Path): Existing Hermes profile directory, never the host root.
 
     Returns:
@@ -66,9 +67,7 @@ def configure(env_file: Path, profile: Path) -> None:
     if not token or ":" not in token or "\n" in token or "\r" in token:
         message = "Fill TELEGRAM_BOT_TOKEN in .env with the BotFather token."
         raise ValueError(message)
-    if not re.fullmatch(r"-[1-9]\d*", chat):
-        message = "Fill DRAWER_TELEGRAM_CHAT_ID with one negative numeric group ID."
-        raise ValueError(message)
+    validate_chat(chat, settings.get("DRAWER_TELEGRAM_MODE") or "group")
     if profile.resolve().parent.name != "profiles":
         message = "Use a named Hermes profile under profiles/, not the host root."
         raise ValueError(message)
@@ -81,17 +80,7 @@ def configure(env_file: Path, profile: Path) -> None:
         mapping(owner.get("platforms")).pop("telegram", None)
     gateway["standalone"] = False
     config["gateway"] = gateway
-    config["telegram"] = {
-        "allowed_chats": [chat],
-        "group_allowed_chats": [chat],
-        "allow_from": [],
-        "dm_policy": "disabled",
-        "group_allow_from": ["*"],
-        "require_mention": True,
-        "guest_mode": False,
-        "unauthorized_dm_behavior": "ignore",
-        "observe_unmentioned_group_messages": False,
-    }
+    config["telegram"] = policy(chat)
     configure_shared_sessions(profile.parent.parent)
     config.update(
         group_sessions_per_user=False, thread_sessions_per_user=False, timezone=TIMEZONE
@@ -104,17 +93,18 @@ def configure(env_file: Path, profile: Path) -> None:
     if credential:
         set_key(profile / ".env", "OPENROUTER_API_KEY", credential)
     temporary.replace(config_path)
-    # Empty user grants avoid authorizing DMs; allow_from=[] also blocks old pairings.
+    # Private id is also the sole user grant; groups retain no private access.
     credentials = {
-        "TELEGRAM_ALLOWED_USERS": "",
+        "DRAWER_TELEGRAM_MODE": "group" if chat.startswith("-") else "private",
+        "TELEGRAM_ALLOWED_USERS": "" if chat.startswith("-") else chat,
         "TELEGRAM_GROUP_ALLOWED_USERS": "",
         "GATEWAY_ALLOWED_USERS": "",
         "TELEGRAM_ALLOW_ALL_USERS": "false",
         "GATEWAY_ALLOW_ALL_USERS": "false",
         "TELEGRAM_ALLOWED_CHATS": chat,
-        "TELEGRAM_GROUP_ALLOWED_CHATS": chat,
+        "TELEGRAM_GROUP_ALLOWED_CHATS": chat if chat.startswith("-") else "",
         "TELEGRAM_GUEST_MODE": "false",
-        "TELEGRAM_REQUIRE_MENTION": "true",
+        "TELEGRAM_REQUIRE_MENTION": "true" if chat.startswith("-") else "false",
         "TELEGRAM_BOT_TOKEN": token,
     }
     for key, credential in credentials.items():

@@ -14,11 +14,10 @@ from time import time
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from dotenv import dotenv_values
-
 from drawer_assistant.database import configured_database
 from drawer_assistant.network import object_map
 from drawer_assistant.store import row_values, transaction
+from drawer_assistant.telegram_access import recipient
 
 from . import batches, jobs
 from .hermes_delivery import Queue, queue
@@ -191,10 +190,12 @@ def tick(settings_file: Path, native_queue: Queue, now: float) -> bool:
     state, error, delay = route["state"], "", 5
     try:
         origin = object_map(json.loads(route["origin"]))
-        allowed = dotenv_values(
-            settings_file.parents[2] / ".env", interpolate=False, encoding="utf-8-sig"
-        ).get("TELEGRAM_ALLOWED_CHATS")
-        if origin.get("platform") != "telegram" or origin.get("chat_id") != allowed:
+        allowed = recipient(settings_file.parents[2])
+        if (
+            origin.get("platform") != "telegram"
+            or origin.get("chat_id") != allowed
+            or (not allowed.startswith("-") and origin.get("user_id") != allowed)
+        ):
             state, error = "blocked", "destination_changed"
         else:
             result = advance(
